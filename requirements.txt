@@ -1,0 +1,9 @@
+spotipy>=2.24.0
+yt-dlp>=2024.8.6
+mutagen>=1.47.0
+requests>=2.32.3
+python-dotenv>=1.0.1
+mcp[cli]>=1.1.2
+pydantic>=2.5.0
+pyjwt[crypto]>=2.8.0
+passlib[argon2]>=1.7.4

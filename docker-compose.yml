@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  songbuddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: songbuddy-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - REQUIRE_AUTH=false
+    volumes:
+      - ./downloads:/app/downloads
+      - ./public:/app/public:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

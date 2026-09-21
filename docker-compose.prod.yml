@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  songbuddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: songbuddy-backend
+    restart: always
+    expose:
+      - "8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - REQUIRE_AUTH=false
+    volumes:
+      - songbuddy_downloads:/app/downloads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: songbuddy-proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      songbuddy:
+        condition: service_healthy
+
+volumes:
+  songbuddy_downloads:

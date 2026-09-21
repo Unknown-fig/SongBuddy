@@ -1,0 +1,25 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+downloads/
+.cache/
+node_modules/
+
+# Add virtual environments
+.venv/
+venv/
+ENV/
+
+# Security, certificates & credentials
+*.pem
+*.key
+*.crt
+users.json
+
+# Test & Coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
