@@ -78,21 +78,35 @@ The repository also includes the companion **spot-extractor** CLI and Model Cont
 
 ## 🚀 Quickstart
 
-### 🐳 Option A: Docker (Fastest)
+### 🐳 Docker Quickstart
 
-Run the containerized application with a single command:
+#### **Local Development**
 
 ```bash
-docker compose up --build
+# Start with live reload
+docker-compose up
+
+# Access at http://localhost:8000
 ```
 
-Open your browser at **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)**.
+#### **Production Deployment**
 
-For production deployments with Nginx and SSL/TLS, see the [Production Deployment Guide](DEPLOYMENT.md).
+```bash
+# Configure environment
+cp .env.example .env
+
+# Start production stack with Nginx reverse proxy
+docker-compose -f docker-compose.prod.yml up -d
+
+# View logs
+docker-compose -f docker-compose.prod.yml logs -f
+```
+
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the complete production deployment guide.
 
 ---
 
-### 🐍 Option B: Local Python Setup
+### 🐍 Local Python Setup
 
 #### 1. Prerequisites & Installation
 
@@ -193,12 +207,19 @@ Add this entry to your client configuration file (e.g. `claude_desktop_config.js
 
 ---
 
-## 🧪 Automated Testing
+## 🧪 Testing
 
-Execute the test suite with coverage:
+Run automated tests:
 
 ```bash
-pytest --cov=. --cov-report=term-missing
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests with coverage
+pytest -v --cov
+
+# Run linting
+flake8 --exclude=.venv,downloads
 ```
 
 ---

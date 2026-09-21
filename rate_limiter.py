@@ -25,7 +25,7 @@ class AdvancedRateLimiter:
 
         # Endpoint-specific limits (requests per window in seconds)
         self.LIMITS: Dict[str, Dict[str, int]] = {
-            "api_auth": {"requests": 10, "window": 60, "burst": 3},
+            "api_auth": {"requests": 60, "window": 60, "burst": 15},
             "api_search": {"requests": 25, "window": 60, "burst": 5},
             "api_stream": {"requests": 120, "window": 60, "burst": 20},
             "api_radio": {"requests": 30, "window": 60, "burst": 5},

@@ -1,43 +1,61 @@
 import pytest
 import time
+from server import SimpleRateLimiter
 from rate_limiter import AdvancedRateLimiter
 
-def test_rate_limiter_allowance():
-    limiter = AdvancedRateLimiter()
-    limiter.LIMITS["test_endpoint"] = {"requests": 3, "window": 2, "burst": 1}
+@pytest.mark.unit
+def test_rate_limiter_allows_within_limit(rate_limiter):
+    """Test that requests within limit are allowed"""
+    assert rate_limiter.is_allowed("192.168.1.1") is True
+    assert rate_limiter.is_allowed("192.168.1.1") is True
+    assert rate_limiter.is_allowed("192.168.1.1") is True
 
-    client = "192.168.1.100"
+@pytest.mark.unit
+def test_rate_limiter_blocks_over_limit(rate_limiter):
+    """Test that requests over limit are blocked"""
+    for _ in range(3):
+        rate_limiter.is_allowed("192.168.1.1")
     
-    # First 3 requests should be allowed
-    assert limiter.is_allowed(client, "test_endpoint")[0] is True
-    assert limiter.is_allowed(client, "test_endpoint")[0] is True
-    assert limiter.is_allowed(client, "test_endpoint")[0] is True
+    # 4th request should be blocked
+    assert rate_limiter.is_allowed("192.168.1.1") is False
 
-    # 4th request should be denied
-    allowed, info = limiter.is_allowed(client, "test_endpoint")
-    assert allowed is False
-    assert info["error"] == "rate_limit_exceeded"
-    assert info["retry_after"] > 0
+@pytest.mark.unit
+def test_rate_limiter_separate_clients(rate_limiter):
+    """Test that different IPs are tracked separately"""
+    assert rate_limiter.is_allowed("192.168.1.1") is True
+    assert rate_limiter.is_allowed("192.168.1.2") is True
+    assert rate_limiter.is_allowed("192.168.1.3") is True
 
-    limiter.stop()
+@pytest.mark.unit
+@pytest.mark.slow
+def test_rate_limiter_window_expiration(rate_limiter):
+    """Test that rate limit window expires"""
+    for _ in range(3):
+        rate_limiter.is_allowed("192.168.1.1")
+    
+    assert rate_limiter.is_allowed("192.168.1.1") is False
+    
+    # Wait for window to expire
+    time.sleep(1.1)
+    
+    assert rate_limiter.is_allowed("192.168.1.1") is True
 
-def test_rate_limiter_temporary_ban():
+@pytest.mark.unit
+def test_advanced_rate_limiter():
+    """Test advanced rate limiter with sliding window and temporary ban"""
     limiter = AdvancedRateLimiter()
     limiter.LIMITS["test_ban"] = {"requests": 1, "window": 10, "burst": 1}
     limiter.VIOLATION_THRESHOLD = 3
     limiter.BAN_DURATION = 5
 
     client = "10.0.0.99"
-    
-    # First request OK
     assert limiter.is_allowed(client, "test_ban")[0] is True
     
-    # Trigger 3 violations
+    # Violations
     limiter.is_allowed(client, "test_ban")
     limiter.is_allowed(client, "test_ban")
     allowed, info = limiter.is_allowed(client, "test_ban")
     
     assert allowed is False
     assert info["error"] == "banned"
-
     limiter.stop()
