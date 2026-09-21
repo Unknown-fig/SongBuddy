@@ -173,7 +173,7 @@ STREAM_RATE_LIMITER = SimpleRateLimiter(max_requests=100, window_seconds=60.0)
 RATE_LIMITER = AdvancedRateLimiter()
 
 # In-Memory & File-backed Users Database
-USERS_DB_FILE = BASE_DIR / "users.json"
+USERS_DB_FILE = Path("/tmp/users.json") if os.getenv("VERCEL") else BASE_DIR / "users.json"
 
 def load_users() -> Dict[str, Dict[str, Any]]:
     if USERS_DB_FILE.exists():
@@ -895,6 +895,15 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Failed to resolve stream for {vid}: {e}")
                 self.send_json_error(500, f"Stream resolution error: {str(e)}")
+                return
+
+            # On Vercel or when redirect requested: redirect to avoid serverless 10s function timeout
+            if os.getenv("VERCEL") or params.get("redirect", ["false"])[0].lower() == "true":
+                self.send_response(307)
+                self.send_header("Location", stream_url)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "public, max-age=3600")
+                self.end_headers()
                 return
 
             req_headers = {"User-Agent": USER_AGENT}

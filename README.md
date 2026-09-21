@@ -102,7 +102,13 @@ docker-compose -f docker-compose.prod.yml up -d
 docker-compose -f docker-compose.prod.yml logs -f
 ```
 
-See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the complete production deployment guide.
+#### **Deploy to Vercel (Serverless Cloud)**
+
+```bash
+npx vercel --prod
+```
+
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for complete Docker, Vercel, and systemd deployment guides.
 
 ---
 

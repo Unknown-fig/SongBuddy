@@ -145,6 +145,50 @@ sudo systemctl status songbuddy
 
 ---
 
+## ⚡ Option 3: Deploy to Vercel (Serverless Cloud)
+
+SongBuddy is configured for **Vercel** with a hybrid edge static frontend and Python serverless API architecture.
+
+### Architecture on Vercel
+- **Frontend**: Served globally via Vercel's Edge CDN directly from [`public/`](public/) with instant loading and 0ms cold start.
+- **Backend API**: Handled by Python Serverless Functions in [`api/index.py`](api/index.py) via [`vercel.json`](vercel.json).
+- **Audio Streaming Optimization**: In serverless environments, `/api/stream` issues an `HTTP 307 Temporary Redirect` to YouTube/Google's CDN audio bitstream, allowing browsers to stream full-length tracks with HTTP Range seeking while completely bypassing Vercel's 10-second serverless execution limits.
+
+### Method A: Deploy via GitHub (Recommended)
+
+1. **Push to GitHub**:
+   ```bash
+   git remote add origin https://github.com/<your-username>/songbuddy.git
+   git branch -M main
+   git push -u origin main
+   ```
+2. **Import into Vercel**:
+   - Go to [vercel.com/new](https://vercel.com/new).
+   - Select your **`songbuddy`** repository and click **Import**.
+   - Under **Environment Variables**, optionally add:
+     - `SECRET_KEY`: High-entropy 32-character token
+     - `SPOTIPY_CLIENT_ID`: (Optional) Spotify Client ID
+     - `SPOTIPY_CLIENT_SECRET`: (Optional) Spotify Client Secret
+3. **Deploy**:
+   - Click **Deploy**. Vercel will build and assign your live production URL (e.g. `https://songbuddy.vercel.app`).
+
+### Method B: Deploy via Vercel CLI
+
+1. **Login to Vercel** in your terminal:
+   ```bash
+   npx vercel login
+   ```
+2. **Deploy to Preview**:
+   ```bash
+   npx vercel
+   ```
+3. **Deploy to Production**:
+   ```bash
+   npx vercel --prod
+   ```
+
+---
+
 ## 📜 SSL / TLS Certificate Setup with Let's Encrypt
 
 To obtain a free, auto-renewing SSL certificate with Certbot:
