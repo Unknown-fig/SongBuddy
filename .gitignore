@@ -23,3 +23,5 @@ users.json
 .coverage
 htmlcov/
 *.log
+
+.vercel
