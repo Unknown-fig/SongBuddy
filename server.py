@@ -332,6 +332,26 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 'no_warnings': True,
             }
 
+            # Support cookiefile from environment variable or local file
+            cookie_path = None
+            raw_cookies = os.getenv("YOUTUBE_COOKIES")
+            if raw_cookies:
+                cookie_path = Path("/tmp/youtube_cookies.txt") if os.getenv("VERCEL") else BASE_DIR / "cookies.txt"
+                try:
+                    with open(cookie_path, "w", encoding="utf-8") as cf:
+                        cf.write(raw_cookies)
+                except Exception as ce:
+                    logger.warning(f"Failed to write cookie file: {ce}")
+            elif (BASE_DIR / "cookies.txt").exists():
+                cookie_path = BASE_DIR / "cookies.txt"
+
+            if cookie_path and cookie_path.exists():
+                ydl_opts['cookiefile'] = str(cookie_path)
+
+            proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("HTTP_PROXY")
+            if proxy_url:
+                ydl_opts['proxy'] = proxy_url
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 stream_url = info.get("url")
