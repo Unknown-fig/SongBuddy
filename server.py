@@ -172,33 +172,16 @@ class SimpleRateLimiter:
 STREAM_RATE_LIMITER = SimpleRateLimiter(max_requests=100, window_seconds=60.0)
 RATE_LIMITER = AdvancedRateLimiter()
 
-# In-Memory & File-backed Users Database
-USERS_DB_FILE = Path("/tmp/users.json") if os.getenv("VERCEL") else BASE_DIR / "users.json"
+# Multi-Tier Persistent User Store & Database
+from user_store import user_store
 
 def load_users() -> Dict[str, Dict[str, Any]]:
-    if USERS_DB_FILE.exists():
-        try:
-            with open(USERS_DB_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading users.json: {e}")
-    return {
-        "dave": {
-            "password_hash": auth_manager.hash_password("SongBuddy2026!"),
-            "name": "Dave Cooper",
-            "email": "dave@songbuddy.studio",
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-    }
-
-USERS_DB = load_users()
+    return user_store.load_users()
 
 def save_users():
-    try:
-        with open(USERS_DB_FILE, "w", encoding="utf-8") as f:
-            json.dump(USERS_DB, f, indent=2)
-    except Exception as e:
-        logger.error(f"Error saving users.json: {e}")
+    user_store.save_users(USERS_DB)
+
+USERS_DB = load_users()
 
 # Curated Trending Tracks for initial launch
 FEATURED_TRACKS = [
@@ -606,6 +589,11 @@ def get_system_metrics() -> Dict[str, Any]:
         },
         "rate_limiter": {
             "tracked_clients": len(STREAM_RATE_LIMITER._clients)
+        },
+        "auth_storage": {
+            "backend": user_store.get_backend_name(),
+            "demo_account_enabled": user_store.is_demo_account_enabled(),
+            "user_count": len(user_store.load_users())
         },
         "active_locks": len(VIDEO_LOCKS)
     }

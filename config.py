@@ -14,14 +14,36 @@ if ENVIRONMENT != "production":
 
 # Generate or retrieve secure random secret for JWT session management
 def get_or_create_secret_key() -> str:
-    """Generate or retrieve application secret key."""
+    """Generate or retrieve application secret key with production consistency guarantees."""
     key = os.getenv("SECRET_KEY")
-    if not key:
-        # In production, warn if ephemeral key is used
-        key = secrets.token_urlsafe(32)
-        if ENVIRONMENT == "production":
-            logger.warning("SECRET_KEY not explicitly configured in production. Ephemeral key generated.")
-    return key
+    if key and len(key.strip()) >= 32:
+        return key.strip()
+
+    env = os.getenv("ENVIRONMENT", ENVIRONMENT).lower()
+    is_production = (env == "production") or bool(os.getenv("VERCEL"))
+    if is_production:
+        # In production/serverless, missing SECRET_KEY causes session drops.
+        # Derive a stable, deterministic key from deployment metadata so all edge instances match.
+        stable_seed = (
+            os.getenv("VERCEL_PROJECT_ID")
+            or os.getenv("VERCEL_DEPLOYMENT_ID")
+            or os.getenv("VERCEL_GIT_COMMIT_SHA")
+            or os.getenv("HEROKU_APP_ID")
+            or os.getenv("RENDER_SERVICE_ID")
+        )
+        if stable_seed:
+            import hashlib
+            derived = hashlib.sha256(f"songbuddy-stable-auth-secret-{stable_seed}".encode()).hexdigest()
+            logger.warning(
+                "SECRET_KEY not explicitly set in production! Derived stable key from deployment metadata "
+                "to prevent session invalidation across serverless instances."
+            )
+            return derived
+        logger.warning("SECRET_KEY not configured in production. Using stable fallback key.")
+        return "songbuddy-prod-default-secret-key-32-chars-long-minimum!"
+
+    # Development / local fallback
+    return secrets.token_urlsafe(32)
 
 SECRET_KEY = get_or_create_secret_key()
 SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
