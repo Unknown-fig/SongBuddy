@@ -170,16 +170,36 @@ function checkAuthState() {
   const overlay = $('auth-overlay');
   const user = state.user;
 
+  // Always keep overlay hidden by default on state check so guest users are never blocked
+  overlay?.classList.add('hidden');
+
   if (user) {
-    overlay?.classList.add('hidden');
     if ($('user-name')) $('user-name').textContent = user.name;
     if ($('user-avatar')) $('user-avatar').src = user.avatar;
     if ($('dropdown-user-name')) $('dropdown-user-name').textContent = user.name;
     if ($('dropdown-user-email')) $('dropdown-user-email').textContent = user.email;
     if ($('dropdown-avatar')) $('dropdown-avatar').src = user.avatar;
   } else {
-    overlay?.classList.remove('hidden');
     if ($('user-name')) $('user-name').textContent = 'Guest';
+    if ($('user-avatar')) $('user-avatar').src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
+    if ($('dropdown-user-name')) $('dropdown-user-name').textContent = 'Guest Listener';
+    if ($('dropdown-user-email')) $('dropdown-user-email').textContent = 'Click to sign in';
+  }
+}
+
+function openAuthModal() {
+  const overlay = $('auth-overlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    overlay.setAttribute('aria-hidden', 'false');
+  }
+}
+
+function closeAuthModal() {
+  const overlay = $('auth-overlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
   }
 }
 
@@ -190,6 +210,7 @@ function loginUser(userData, remember = true) {
   } else {
     sessionStorage.setItem('songbuddy_user', JSON.stringify(userData));
   }
+  closeAuthModal();
   checkAuthState();
   closeUserDropdown();
   showToastNotification(`Welcome back, ${userData.name}! 🎵`);
@@ -200,6 +221,7 @@ function logoutUser() {
   localStorage.removeItem('songbuddy_user');
   sessionStorage.removeItem('songbuddy_user');
   closeUserDropdown();
+  closeAuthModal();
   checkAuthState();
   showToastNotification('Logged out of SongBuddy Studio');
 }
@@ -1494,7 +1516,7 @@ function setupEventListeners() {
 
   $('dock-action-account')?.addEventListener('click', () => {
     toggleDockUserPopover(true);
-    $('auth-overlay')?.classList.remove('hidden');
+    openAuthModal();
   });
 
   // Close dock popover when clicking anywhere outside
@@ -1514,8 +1536,9 @@ function setupEventListeners() {
   $('lyrics-overlay-backdrop')?.addEventListener('click', closeLyrics);
 
   // Authentication & Login Modal Listeners
-  $('btn-close-auth-overlay')?.addEventListener('click', () => $('auth-overlay')?.classList.add('hidden'));
-  $('auth-backdrop')?.addEventListener('click', () => $('auth-overlay')?.classList.add('hidden'));
+  $('btn-close-auth-overlay')?.addEventListener('click', closeAuthModal);
+  $('auth-backdrop')?.addEventListener('click', closeAuthModal);
+  $('btn-continue-guest')?.addEventListener('click', closeAuthModal);
 
   // Authentication & Login Modal Listeners
   $('tab-sign-in')?.addEventListener('click', () => setAuthMode('sign-in'));
@@ -1569,7 +1592,11 @@ function setupEventListeners() {
   // User Dropdown interactions
   $('user-profile-pill')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    toggleUserDropdown();
+    if (!state.user) {
+      openAuthModal();
+    } else {
+      toggleUserDropdown();
+    }
   });
 
   document.addEventListener('click', (e) => {
@@ -1585,7 +1612,17 @@ function setupEventListeners() {
 
   $('btn-menu-switch-account')?.addEventListener('click', () => {
     closeUserDropdown();
-    $('auth-overlay')?.classList.remove('hidden');
+    openAuthModal();
+  });
+
+  // Close modals on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const overlay = $('auth-overlay');
+      if (overlay && !overlay.classList.contains('hidden')) {
+        closeAuthModal();
+      }
+    }
   });
 
   $('btn-menu-liked')?.addEventListener('click', () => {
