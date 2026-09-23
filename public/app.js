@@ -693,11 +693,20 @@ function togglePlayPause() {
     return;
   }
 
+  // If audio has no source yet (e.g. initial preview) or mismatched track, trigger track load
+  if (!audio.src || audio.src === '' || audio.src === window.location.href || !audio.src.includes(encodeURIComponent(state.currentTrack.id))) {
+    playTrack(state.currentTrack);
+    return;
+  }
+
   if (audio.paused) {
     audio.play().then(() => {
       state.isPlaying = true;
       updatePlayPauseIcons(true);
-    }).catch(console.warn);
+    }).catch(err => {
+      console.warn('[Audio play retry via playTrack]:', err);
+      playTrack(state.currentTrack);
+    });
   } else {
     audio.pause();
     state.isPlaying = false;

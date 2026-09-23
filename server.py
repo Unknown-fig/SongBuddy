@@ -315,6 +315,16 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 'no_warnings': True,
             }
 
+            # Mobile/embedded clients bypass bot verification checks on cloud datacenter IPs (Vercel/AWS)
+            clients_env = os.getenv("YOUTUBE_PLAYER_CLIENTS", "android,ios")
+            player_clients = [c.strip() for c in clients_env.split(",") if c.strip()]
+            if player_clients:
+                ydl_opts['extractor_args'] = {
+                    'youtube': {
+                        'player_client': player_clients
+                    }
+                }
+
             # Support cookiefile from environment variable or local file
             cookie_path = None
             raw_cookies = os.getenv("YOUTUBE_COOKIES")
