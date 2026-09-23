@@ -11,6 +11,7 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-at-least-32-chars-long!"
 os.environ["REQUIRE_AUTH"] = "false"
 os.environ["PORT"] = "8000"
+os.environ["ENABLE_DEMO_ACCOUNT"] = "true"
 
 from server import BoundedLRUCache, SimpleRateLimiter, FEATURED_TRACKS
 

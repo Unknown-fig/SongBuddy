@@ -1524,6 +1524,19 @@ function setupEventListeners() {
   $('btn-social-spotify')?.addEventListener('click', () => loginUser(SPOTIFY_USER, true));
   $('btn-social-google')?.addEventListener('click', () => loginUser(GOOGLE_USER, true));
 
+  // Dynamically hide demo account button in production if disabled on backend
+  fetch('/api/health')
+    .then(r => r.json())
+    .then(data => {
+      if (data?.auth_storage?.demo_account_enabled === false) {
+        const demoBox = document.querySelector('.quick-demo-box');
+        if (demoBox) demoBox.style.display = 'none';
+        const divider = document.querySelector('.auth-divider');
+        if (divider) divider.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+
   // Password visibility eye toggle
   $('btn-toggle-password')?.addEventListener('click', () => {
     const pwInput = $('auth-input-password');

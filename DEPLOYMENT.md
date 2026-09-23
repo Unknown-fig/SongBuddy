@@ -187,6 +187,24 @@ SongBuddy is configured for **Vercel** with a hybrid edge static frontend and Py
    npx vercel --prod
    ```
 
+### 🔒 Persistent User Storage & Authentication on Vercel
+
+Serverless functions on Vercel are ephemeral and recycle containers regularly. To guarantee that user registrations (`/api/auth/register`) persist across cold starts:
+
+1. **1-Click Vercel KV Storage (Recommended)**:
+   - In your Vercel project dashboard, navigate to the **Storage** tab.
+   - Click **Create Database** → Select **KV** (Serverless Redis powered by Upstash).
+   - Click **Connect Project** to link it to your `songbuddy` project.
+   - *SongBuddy automatically detects `KV_REST_API_URL` and `KV_REST_API_TOKEN` and persists registered accounts across all global edge instances!*
+
+2. **JWT Secret Protection**:
+   - `SECRET_KEY` is configured as a production secret in Vercel (`vercel env add SECRET_KEY production`).
+   - If missing, SongBuddy derives a stable deployment key rather than an ephemeral random token, preventing random user session logouts.
+
+3. **Demo Account Hardening**:
+   - In production (`ENVIRONMENT=production` or on Vercel), hardcoded demo accounts (`dave` / `SongBuddy2026!`) are **strictly disabled by default**.
+   - To enable demo accounts for testing in preview, explicitly set `ENABLE_DEMO_ACCOUNT=true` in your environment variables.
+
 ---
 
 ## 📜 SSL / TLS Certificate Setup with Let's Encrypt
