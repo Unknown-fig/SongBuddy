@@ -325,9 +325,17 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                     }
                 }
 
-            # Support cookiefile from environment variable or local file
+            # Support cookiefile from environment variable (plain text or base64) or local file
             cookie_path = None
             raw_cookies = os.getenv("YOUTUBE_COOKIES")
+            raw_cookies_b64 = os.getenv("YOUTUBE_COOKIES_B64")
+            if raw_cookies_b64 and not raw_cookies:
+                try:
+                    import base64
+                    raw_cookies = base64.b64decode(raw_cookies_b64.strip()).decode("utf-8")
+                except Exception as b64_err:
+                    logger.warning(f"Failed to decode YOUTUBE_COOKIES_B64: {b64_err}")
+
             if raw_cookies:
                 cookie_path = Path("/tmp/youtube_cookies.txt") if os.getenv("VERCEL") else BASE_DIR / "cookies.txt"
                 try:
