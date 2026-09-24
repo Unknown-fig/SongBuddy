@@ -238,6 +238,33 @@ Certbot automatically handles certificate generation and sets up renewal cron ti
 | `SPOTIPY_CLIENT_ID` | `None` | Spotify Developer Client ID (optional). |
 | `SPOTIPY_CLIENT_SECRET` | `None` | Spotify Developer Client Secret (optional). |
 | `DOWNLOAD_DIR` | `./downloads` | Directory where offline MP3s are exported. |
+| `YOUTUBE_COOKIES` | `None` | Raw Netscape cookie format string to authenticate with YouTube on cloud IPs. |
+| `YOUTUBE_COOKIES_B64` | `None` | Base64-encoded Netscape cookie string (prevents newline/tab mangling). |
+| `YOUTUBE_PROXY` | `None` | HTTP/HTTPS residential/datacenter proxy URL for YouTube extraction. |
+
+---
+
+### 🍪 Configuring YouTube Cookies for Vercel / Cloud Datacenters
+
+YouTube blocks unauthenticated requests from commercial cloud datacenter IP ranges (AWS Lambda on Vercel, GCP, Azure) with *"Sign in to confirm you're not a bot"*. To enable live YouTube stream resolution on Vercel:
+
+1. **Export YouTube Cookies**:
+   - Open Chrome, Brave, or Firefox and go to [youtube.com](https://www.youtube.com).
+   - Use the open-source extension **"Get cookies.txt LOCALLY"** or **"Cookie-Editor"** to export cookies for `youtube.com` in **Netscape HTTP Cookie format**.
+2. **Encode to Base64 (Recommended for Cloud Dashboards)**:
+   - In terminal:
+     ```bash
+     # Linux / macOS:
+     base64 -w 0 cookies.txt
+     
+     # Windows PowerShell:
+     [Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt"))
+     ```
+3. **Add to Vercel Environment Variables**:
+   - Go to your Vercel Project ➔ **Settings** ➔ **Environment Variables**.
+   - Add variable name: `YOUTUBE_COOKIES_B64` (paste the base64 string), or `YOUTUBE_COOKIES` (paste the raw cookies).
+   - Select targets: **Production**, **Preview**, **Development**.
+   - Save and redeploy!
 
 ---
 
