@@ -20,3 +20,5 @@ downloads/
 *.crt
 users.json
 *.log
+cookies.txt
+*cookie*.txt

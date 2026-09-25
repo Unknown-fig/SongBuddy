@@ -9,17 +9,24 @@ services:
     restart: always
     expose:
       - "8000"
+    env_file:
+      - .env
     environment:
       - PORT=8000
       - HOST=0.0.0.0
       - ENVIRONMENT=production
-      - LOG_LEVEL=INFO
-      - LOG_FORMAT=json
-      - REQUIRE_AUTH=false
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
+      - SECRET_KEY=${SECRET_KEY:-}
+      - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID:-}
+      - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET:-}
+      - YOUTUBE_COOKIES=${YOUTUBE_COOKIES:-}
+      - YOUTUBE_COOKIES_B64=${YOUTUBE_COOKIES_B64:-}
     volumes:
       - songbuddy_downloads:/app/downloads
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=4).getcode() == 200 else 1)\" || curl -f http://localhost:8000/api/health || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3
