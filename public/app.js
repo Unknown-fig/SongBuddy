@@ -1421,9 +1421,7 @@ function setupAudioListeners() {
   if (!audio) return;
 
   audio.addEventListener('timeupdate', () => {
-    if (!isYTActive) {
-      updateProgressUI(audio.currentTime, audio.duration);
-    }
+    updateProgressUI(audio.currentTime, audio.duration);
   });
 
   audio.addEventListener('progress', () => {
@@ -1435,21 +1433,19 @@ function setupAudioListeners() {
   });
 
   audio.addEventListener('ended', () => {
-    if (!isYTActive) {
-      if (state.isRepeat) {
-        audio.currentTime = 0;
-        audio.play();
-      } else {
-        playNextTrack();
-      }
+    if (state.isRepeat) {
+      audio.currentTime = 0;
+      audio.play();
+    } else {
+      playNextTrack();
     }
   });
 
   audio.addEventListener('play', () => {
-    if (!isYTActive) updatePlayPauseIcons(true);
+    updatePlayPauseIcons(true);
   });
   audio.addEventListener('pause', () => {
-    if (!isYTActive) updatePlayPauseIcons(false);
+    updatePlayPauseIcons(false);
   });
 }
 
