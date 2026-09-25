@@ -288,8 +288,30 @@ def clean_track_title(raw_title: str, default_artist: str) -> Tuple[str, str]:
         return (title or raw_title, artist or default_artist)
     return (cleaned or raw_title, default_artist)
 
+def has_valid_netscape_cookies(path_or_content: Optional[Union[Path, str]]) -> bool:
+    """Ensures a cookie file or string has actual tab-separated cookie entries, not just comments."""
+    if not path_or_content:
+        return False
+    try:
+        if isinstance(path_or_content, Path):
+            if not path_or_content.exists() or path_or_content.stat().st_size < 10:
+                return False
+            with open(path_or_content, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+        else:
+            lines = path_or_content.splitlines()
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                parts = stripped.split("\t")
+                if len(parts) >= 7:
+                    return True
+    except Exception:
+        pass
+    return False
+
 def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, Any]:
-    """Resolves unencrypted direct audio stream URL with lock timeout & double-checked caching."""
+    """Resolves direct audio stream URL with clean zero-cookie extraction & double-checked caching."""
     if not force_refresh:
         cached = STREAM_CACHE.get(video_id)
         if cached:
@@ -315,8 +337,8 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 'no_warnings': True,
             }
 
-            # Mobile/embedded clients bypass bot verification checks on cloud datacenter IPs (Vercel/AWS)
-            clients_env = os.getenv("YOUTUBE_PLAYER_CLIENTS", "android,ios")
+            # Optional custom player clients if explicitly configured via environment
+            clients_env = os.getenv("YOUTUBE_PLAYER_CLIENTS", "")
             player_clients = [c.strip() for c in clients_env.split(",") if c.strip()]
             if player_clients:
                 ydl_opts['extractor_args'] = {
@@ -325,7 +347,7 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                     }
                 }
 
-            # Support cookiefile from environment variable (plain text or base64) or local file
+            # Support cookiefile ONLY if valid, authenticated cookies are explicitly provided
             cookie_path = None
             raw_cookies = os.getenv("YOUTUBE_COOKIES")
             raw_cookies_b64 = os.getenv("YOUTUBE_COOKIES_B64")
@@ -336,7 +358,7 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 except Exception as b64_err:
                     logger.warning(f"Failed to decode YOUTUBE_COOKIES_B64: {b64_err}")
 
-            if raw_cookies:
+            if raw_cookies and has_valid_netscape_cookies(raw_cookies):
                 cookie_path = Path("/tmp/youtube_cookies.txt") if os.getenv("VERCEL") else BASE_DIR / "cookies.txt"
                 try:
                     with open(cookie_path, "w", encoding="utf-8") as cf:
@@ -344,7 +366,9 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 except Exception as ce:
                     logger.warning(f"Failed to write cookie file: {ce}")
             elif (BASE_DIR / "cookies.txt").exists():
-                cookie_path = BASE_DIR / "cookies.txt"
+                candidate = BASE_DIR / "cookies.txt"
+                if has_valid_netscape_cookies(candidate):
+                    cookie_path = candidate
 
             if cookie_path and cookie_path.exists():
                 ydl_opts['cookiefile'] = str(cookie_path)
@@ -353,27 +377,38 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
             if proxy_url:
                 ydl_opts['proxy'] = proxy_url
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                stream_url = info.get("url")
-                if not stream_url:
-                    raise ValueError(f"Could not extract stream URL for video {video_id}")
+            info = None
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception as first_err:
+                logger.warning(f"Primary stream extraction attempt failed for {video_id}: {first_err}. Retrying with flexible format.")
+                retry_opts = dict(ydl_opts)
+                retry_opts['format'] = 'bestaudio/best'
+                if 'cookiefile' in retry_opts:
+                    del retry_opts['cookiefile']
+                with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
 
-                raw_title = info.get("title", "Unknown Track")
-                raw_artist = info.get("uploader") or info.get("channel") or "Unknown Artist"
-                cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_artist)
+            stream_url = info.get("url") if info else None
+            if not stream_url:
+                raise ValueError(f"Could not extract stream URL for video {video_id}")
 
-                result = {
-                    "stream_url": stream_url,
-                    "title": cleaned_title,
-                    "artist": cleaned_artist,
-                    "duration": info.get("duration"),
-                    "acodec": info.get("acodec", "aac"),
-                    "abr": info.get("abr", 128),
-                    "ext": info.get("ext", "m4a")
-                }
-                STREAM_CACHE.set(video_id, result)
-                return result
+            raw_title = info.get("title", "Unknown Track")
+            raw_artist = info.get("uploader") or info.get("channel") or "Unknown Artist"
+            cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_artist)
+
+            result = {
+                "stream_url": stream_url,
+                "title": cleaned_title,
+                "artist": cleaned_artist,
+                "duration": info.get("duration"),
+                "acodec": info.get("acodec", "aac"),
+                "abr": info.get("abr", 128),
+                "ext": info.get("ext", "m4a")
+            }
+            STREAM_CACHE.set(video_id, result)
+            return result
     finally:
         vlock.release()
 
@@ -915,22 +950,13 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 self.send_json_error(400, "Invalid YouTube video ID parameter.")
                 return
 
-            fallback_used = False
             try:
                 stream_info = resolve_stream_url(vid)
                 stream_url = stream_info["stream_url"]
             except Exception as e:
                 logger.error(f"Failed to resolve stream for {vid}: {e}")
-                # High-fidelity audio fallback streams when cloud datacenter IP is blocked by YouTube bot detection
-                fallback_streams = [
-                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-                    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
-                ]
-                import binascii
-                idx = binascii.crc32(vid.encode("utf-8")) % len(fallback_streams)
-                stream_url = fallback_streams[idx]
-                fallback_used = True
+                self.send_json_error(502, f"Audio stream extraction failed for track {vid}. Stream is unavailable.")
+                return
 
             # On Vercel or when redirect requested: redirect to avoid serverless 10s function timeout
             if os.getenv("VERCEL") or params.get("redirect", ["false"])[0].lower() == "true":
@@ -938,8 +964,6 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 self.send_header("Location", stream_url)
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Cache-Control", "public, max-age=3600")
-                if fallback_used:
-                    self.send_header("X-SongBuddy-Fallback", "datacenter-ip-bypass")
                 self.end_headers()
                 return
 
