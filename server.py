@@ -337,16 +337,6 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 'no_warnings': True,
             }
 
-            # Mobile/embedded clients bypass bot verification checks on cloud datacenter IPs (Vercel/AWS)
-            clients_env = os.getenv("YOUTUBE_PLAYER_CLIENTS", "android,ios")
-            player_clients = [c.strip() for c in clients_env.split(",") if c.strip()]
-            if player_clients:
-                ydl_opts['extractor_args'] = {
-                    'youtube': {
-                        'player_client': player_clients
-                    }
-                }
-
             # Support cookiefile ONLY if valid, authenticated cookies are explicitly provided
             cookie_path = None
             raw_cookies = os.getenv("YOUTUBE_COOKIES")
@@ -378,26 +368,76 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 if has_valid_netscape_cookies(candidate):
                     cookie_path = candidate
 
-            if cookie_path and cookie_path.exists():
-                ydl_opts['cookiefile'] = str(cookie_path)
-
             proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("HTTP_PROXY")
-            if proxy_url:
-                ydl_opts['proxy'] = proxy_url
-
             info = None
+            last_err = None
+
+            # Attempt 1: Modern mobile/visionos clients (visionos, android) WITHOUT cookies.
+            # (yt-dlp disables android/visionos if cookiefile is set, and these clients bypass bot detection natively)
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                opts_tier1 = {
+                    'format': 'bestaudio/best',
+                    'quiet': True,
+                    'noplaylist': True,
+                    'no_warnings': True,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['visionos', 'android']
+                        }
+                    }
+                }
+                if proxy_url:
+                    opts_tier1['proxy'] = proxy_url
+                with yt_dlp.YoutubeDL(opts_tier1) as ydl:
                     info = ydl.extract_info(url, download=False)
-            except Exception as first_err:
-                logger.warning(f"Primary stream extraction failed for {video_id}: {first_err}. Retrying with bestaudio format.")
-                retry_opts = dict(ydl_opts)
-                retry_opts['format'] = 'bestaudio/best'
+            except Exception as e1:
+                last_err = e1
+                logger.warning(f"Tier 1 (visionos/android) extraction failed for {video_id}: {e1}")
+
+            # Attempt 2: If Tier 1 failed and cookies are available, try cookie-supporting clients (web_safari, tv, web)
+            if not info and cookie_path and cookie_path.exists():
                 try:
-                    with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                    opts_tier2 = {
+                        'format': 'bestaudio/best',
+                        'quiet': True,
+                        'noplaylist': True,
+                        'no_warnings': True,
+                        'cookiefile': str(cookie_path),
+                        'extractor_args': {
+                            'youtube': {
+                                'player_client': ['web_safari', 'tv', 'web']
+                            }
+                        }
+                    }
+                    if proxy_url:
+                        opts_tier2['proxy'] = proxy_url
+                    with yt_dlp.YoutubeDL(opts_tier2) as ydl:
                         info = ydl.extract_info(url, download=False)
-                except Exception as second_err:
-                    raise RuntimeError(f"Primary error: {first_err} | Retry error: {second_err}")
+                except Exception as e2:
+                    last_err = e2
+                    logger.warning(f"Tier 2 (authenticated) extraction failed for {video_id}: {e2}")
+
+            # Attempt 3: General fallback without client restrictions
+            if not info:
+                try:
+                    opts_tier3 = {
+                        'format': 'bestaudio/best',
+                        'quiet': True,
+                        'noplaylist': True,
+                        'no_warnings': True,
+                    }
+                    if cookie_path and cookie_path.exists():
+                        opts_tier3['cookiefile'] = str(cookie_path)
+                    if proxy_url:
+                        opts_tier3['proxy'] = proxy_url
+                    with yt_dlp.YoutubeDL(opts_tier3) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                except Exception as e3:
+                    last_err = e3
+                    logger.warning(f"Tier 3 extraction failed for {video_id}: {e3}")
+
+            if not info:
+                raise RuntimeError(f"All extraction tiers failed: {last_err}")
 
             stream_url = info.get("url") if info else None
             if not stream_url:
