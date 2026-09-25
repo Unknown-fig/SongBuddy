@@ -358,6 +358,14 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 except Exception as b64_err:
                     logger.warning(f"Failed to decode YOUTUBE_COOKIES_B64: {b64_err}")
 
+            if not raw_cookies:
+                try:
+                    from cookies_data import EMBEDDED_COOKIES
+                    if EMBEDDED_COOKIES and has_valid_netscape_cookies(EMBEDDED_COOKIES):
+                        raw_cookies = EMBEDDED_COOKIES
+                except ImportError:
+                    pass
+
             if raw_cookies and has_valid_netscape_cookies(raw_cookies):
                 cookie_path = Path("/tmp/youtube_cookies.txt") if os.getenv("VERCEL") else BASE_DIR / "cookies.txt"
                 try:
