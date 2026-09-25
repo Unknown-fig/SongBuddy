@@ -1447,6 +1447,16 @@ function setupAudioListeners() {
   audio.addEventListener('pause', () => {
     updatePlayPauseIcons(false);
   });
+  audio.addEventListener('error', () => {
+    updatePlayPauseIcons(false);
+    state.isPlaying = false;
+    const isVercelHost = window.location.hostname.includes('vercel.app');
+    if (isVercelHost) {
+      showToastNotification('⚠️ YouTube blocks Vercel datacenter IPs. Please use your local instance at http://127.0.0.1:8000 for live streaming.', 6000);
+    } else {
+      showToastNotification(`⚠️ Unable to stream "${state.currentTrack?.title || 'track'}". Please try another song.`, 4000);
+    }
+  });
 }
 
 function setupEventListeners() {
