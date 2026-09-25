@@ -390,13 +390,14 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
             except Exception as first_err:
-                logger.warning(f"Primary stream extraction attempt failed for {video_id}: {first_err}. Retrying with flexible format.")
+                logger.warning(f"Primary stream extraction failed for {video_id}: {first_err}. Retrying with bestaudio format.")
                 retry_opts = dict(ydl_opts)
                 retry_opts['format'] = 'bestaudio/best'
-                if 'cookiefile' in retry_opts:
-                    del retry_opts['cookiefile']
-                with yt_dlp.YoutubeDL(retry_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
+                try:
+                    with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                except Exception as second_err:
+                    raise RuntimeError(f"Primary error: {first_err} | Retry error: {second_err}")
 
             stream_url = info.get("url") if info else None
             if not stream_url:
