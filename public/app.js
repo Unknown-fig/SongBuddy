@@ -10,7 +10,8 @@ const state = {
   theme: localStorage.getItem('songbuddy_theme') || 'neumorphic',
   currentTrack: null,
   isPlaying: false,
-  queue: [],
+  queue: JSON.parse(localStorage.getItem('songbuddy_queue') || '[]'),
+  radioQueue: [],
   history: [],
   featuredTracks: [],
   likedTracks: JSON.parse(localStorage.getItem('songbuddy_liked_tracks') || '[]'),
@@ -547,6 +548,9 @@ async function initApp() {
   await loadTrendingTracks();
   renderLikedTracks();
 
+  // Initialize Queue UI badge & state
+  updateQueueBadge();
+
   // Rotate Hero slide every 10 seconds if not currently playing
   setInterval(() => {
     if (!state.isPlaying) {
@@ -657,24 +661,223 @@ function createTrackRow(track, rankNumber) {
 
   row.innerHTML = `
     <span class="chart-rank">${rank}</span>
-    <img src="${thumb}" alt="${track.title}" class="chart-thumb" loading="lazy" onerror="if(this.src.includes('hq720.jpg')){this.src=this.src.replace('hq720.jpg','hqdefault.jpg');}else{this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');}">
+    <img src="${thumb}" alt="${escapeHTML(track.title)}" class="chart-thumb" loading="lazy" onerror="if(this.src.includes('hq720.jpg')){this.src=this.src.replace('hq720.jpg','hqdefault.jpg');}else{this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');}">
     <div class="chart-info">
       <span class="chart-title">${escapeHTML(track.title)}</span>
       <span class="chart-artist">${escapeHTML(track.artist)}</span>
     </div>
     <span class="chart-time">${duration}</span>
-    <button class="chart-play-icon" title="Play">
+    <button class="chart-queue-btn" title="Add to Queue" aria-label="Add to Queue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
+    <button class="chart-play-icon" title="Play" aria-label="Play Track">
       <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
         <polygon points="5 3 19 12 5 21 5 3"></polygon>
       </svg>
     </button>
   `;
 
+  // Attach queue button listener with stopPropagation to prevent auto-play
+  const queueBtn = row.querySelector('.chart-queue-btn');
+  queueBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    addToQueue(track);
+  });
+
   row.addEventListener('click', () => {
     playTrack(track);
   });
 
   return row;
+}
+
+// ============================================================================
+// Queue Management (Workstation "Up Next" Queue Engine)
+// ============================================================================
+function saveQueueToStorage() {
+  try {
+    localStorage.setItem('songbuddy_queue', JSON.stringify(state.queue));
+  } catch (err) {
+    console.warn('[Storage error]:', err);
+  }
+}
+
+function addToQueue(track, silent = false) {
+  if (!track || !track.id) return;
+
+  const trackObj = {
+    id: track.id,
+    title: track.title || 'Unknown Title',
+    artist: track.artist || 'Unknown Artist',
+    thumbnail: track.thumbnail || '',
+    duration_formatted: track.duration_formatted || '3:30',
+    streamUrl: track.streamUrl || ''
+  };
+
+  state.queue.push(trackObj);
+  saveQueueToStorage();
+  updateQueueBadge();
+  renderQueueDrawer();
+
+  if (!silent) {
+    showToastNotification(`Added "${trackObj.title}" to queue 🎵`);
+  }
+}
+
+function removeFromQueue(index) {
+  if (index >= 0 && index < state.queue.length) {
+    const removed = state.queue.splice(index, 1)[0];
+    saveQueueToStorage();
+    updateQueueBadge();
+    renderQueueDrawer();
+    showToastNotification(`Removed "${removed?.title || 'track'}" from queue`);
+  }
+}
+
+function clearQueue() {
+  if (!state.queue || state.queue.length === 0) return;
+  state.queue = [];
+  saveQueueToStorage();
+  updateQueueBadge();
+  renderQueueDrawer();
+  showToastNotification('Queue cleared');
+}
+
+function playQueuedTrack(index) {
+  if (index >= 0 && index < state.queue.length) {
+    const track = state.queue.splice(index, 1)[0];
+    saveQueueToStorage();
+    updateQueueBadge();
+    renderQueueDrawer();
+    playTrack(track, { startRadio: false });
+  }
+}
+
+function updateQueueBadge() {
+  const badge = $('queue-count-badge');
+  const count = state.queue ? state.queue.length : 0;
+  if (badge) {
+    badge.textContent = count;
+    badge.classList.toggle('hidden', count === 0);
+  }
+
+  const pill = $('queue-pill-count');
+  if (pill) {
+    pill.textContent = `${count} ${count === 1 ? 'track' : 'tracks'}`;
+  }
+}
+
+function openQueueDrawer() {
+  const overlay = $('queue-drawer-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('hidden');
+  renderQueueDrawer();
+}
+
+function closeQueueDrawer() {
+  const overlay = $('queue-drawer-overlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+  }
+}
+
+function renderQueueDrawer() {
+  // Update Now Playing card inside queue drawer
+  const npTitle = $('queue-np-title');
+  const npArtist = $('queue-np-artist');
+  const npThumb = $('queue-np-thumb');
+  const npEq = $('queue-np-eq');
+
+  if (state.currentTrack) {
+    if (npTitle) npTitle.textContent = state.currentTrack.title || 'Unknown Title';
+    if (npArtist) npArtist.textContent = state.currentTrack.artist || 'Unknown Artist';
+    if (npThumb) setSafeCoverArt(npThumb, state.currentTrack);
+    if (npEq) npEq.style.opacity = state.isPlaying ? '1' : '0.4';
+  } else {
+    if (npTitle) npTitle.textContent = 'No track playing';
+    if (npArtist) npArtist.textContent = 'Choose a song to start listening';
+    if (npEq) npEq.style.opacity = '0.2';
+  }
+
+  // Update Next Up list
+  const listContainer = $('queue-items-list');
+  if (!listContainer) return;
+  listContainer.innerHTML = '';
+
+  const clearBtn = $('btn-clear-queue');
+  if (clearBtn) {
+    clearBtn.style.display = (state.queue && state.queue.length > 0) ? 'inline-flex' : 'none';
+  }
+
+  if (!state.queue || state.queue.length === 0) {
+    listContainer.innerHTML = `
+      <div class="queue-empty-state">
+        <div class="queue-empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <circle cx="4" cy="6" r="1.5" fill="currentColor"></circle>
+            <circle cx="4" cy="12" r="1.5" fill="currentColor"></circle>
+            <circle cx="4" cy="18" r="1.5" fill="currentColor"></circle>
+          </svg>
+        </div>
+        <span class="queue-empty-title">Your Queue is Empty</span>
+        <p class="queue-empty-subtitle">Tap the <strong>+</strong> icon on any song in Top Charts or Search to queue it up next.</p>
+      </div>
+    `;
+    return;
+  }
+
+  state.queue.forEach((track, index) => {
+    const item = document.createElement('div');
+    item.className = 'queue-item-row';
+
+    let thumb = track.thumbnail || generateFallbackCover(track.title, track.artist);
+    if (thumb.includes('hq720.jpg')) {
+      thumb = thumb.replace('hq720.jpg', 'hqdefault.jpg');
+    }
+
+    item.innerHTML = `
+      <span class="queue-item-order">${index + 1}</span>
+      <img src="${thumb}" alt="${escapeHTML(track.title)}" class="queue-item-thumb" loading="lazy" onerror="this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');">
+      <div class="queue-item-info">
+        <span class="queue-item-title">${escapeHTML(track.title)}</span>
+        <span class="queue-item-artist">${escapeHTML(track.artist)}</span>
+      </div>
+      <span class="queue-item-time">${track.duration_formatted || '3:30'}</span>
+      <button class="queue-item-play-btn" title="Play Now" aria-label="Play Now">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+      </button>
+      <button class="queue-item-remove-btn" title="Remove from queue" aria-label="Remove from queue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="15" height="15">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    `;
+
+    item.querySelector('.queue-item-play-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      playQueuedTrack(index);
+    });
+
+    item.querySelector('.queue-item-remove-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeFromQueue(index);
+    });
+
+    item.addEventListener('click', () => {
+      playQueuedTrack(index);
+    });
+
+    listContainer.appendChild(item);
+  });
 }
 
 // ============================================================================
@@ -777,6 +980,12 @@ function updatePlayerUI(track) {
 
   setSafeCoverArt($('player-cover-art'), track);
 
+  // Sync Now Playing card in queue drawer
+  if ($('queue-np-title')) $('queue-np-title').textContent = track.title || 'Unknown Title';
+  if ($('queue-np-artist')) $('queue-np-artist').textContent = track.artist || 'Unknown Artist';
+  const qnpThumb = $('queue-np-thumb');
+  if (qnpThumb) setSafeCoverArt(qnpThumb, track);
+
   if ($('scrub-current-time')) $('scrub-current-time').textContent = '0:00';
   if ($('scrub-total-time')) $('scrub-total-time').textContent = track.duration_formatted || '3:45';
   if ($('scrubber-played-bar')) $('scrubber-played-bar').style.width = '0%';
@@ -814,6 +1023,11 @@ function updatePlayPauseIcons(isPlaying) {
   const eqChip = $('chip-equalizer');
   if (eqChip) {
     eqChip.classList.toggle('playing', !!isPlaying);
+  }
+
+  const queueEq = $('queue-np-eq');
+  if (queueEq) {
+    queueEq.style.opacity = isPlaying ? '1' : '0.4';
   }
 }
 
@@ -865,10 +1079,18 @@ function togglePlayPause() {
 }
 
 function playNextTrack() {
-  if (state.queue.length > 0) {
+  if (state.queue && state.queue.length > 0) {
     const next = state.isShuffle
       ? state.queue.splice(Math.floor(Math.random() * state.queue.length), 1)[0]
       : state.queue.shift();
+    saveQueueToStorage();
+    updateQueueBadge();
+    renderQueueDrawer();
+    playTrack(next, { startRadio: false });
+  } else if (state.radioQueue && state.radioQueue.length > 0) {
+    const next = state.isShuffle
+      ? state.radioQueue.splice(Math.floor(Math.random() * state.radioQueue.length), 1)[0]
+      : state.radioQueue.shift();
     playTrack(next, { startRadio: false });
   } else if (state.featuredTracks.length > 0) {
     const currentIdx = state.featuredTracks.findIndex(t => t.id === state.currentTrack?.id);
@@ -903,7 +1125,7 @@ async function loadRadioQueue(seedId) {
     const res = await fetch(`/api/radio?id=${encodeURIComponent(seedId)}`);
     if (!res.ok) return;
     const tracks = await res.json();
-    state.queue = tracks;
+    state.radioQueue = tracks;
 
     const list = $('radio-tracks-list');
     if (list) {
@@ -1435,6 +1657,19 @@ function setupEventListeners() {
     }
   });
 
+  $('hero-queue-btn')?.addEventListener('click', () => {
+    const slide = HERO_SLIDES[state.currentHeroIndex];
+    if (slide) {
+      addToQueue({
+        id: slide.id,
+        title: slide.title,
+        artist: slide.artist,
+        thumbnail: slide.thumbnail,
+        duration_formatted: slide.duration_formatted
+      });
+    }
+  });
+
   document.querySelectorAll('.h-dot').forEach(dot => {
     dot.addEventListener('click', () => {
       const idx = parseInt(dot.dataset.index, 10);
@@ -1479,6 +1714,9 @@ function setupEventListeners() {
     } else if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
       e.preventDefault();
       togglePlayPause();
+    } else if (e.key === 'Escape') {
+      closeQueueDrawer();
+      closeLyrics();
     }
   });
 
@@ -1607,7 +1845,13 @@ function setupEventListeners() {
   // Neumorphic Chips & Actions
   $('chip-lyrics')?.addEventListener('click', openLyrics);
   $('chip-equalizer')?.addEventListener('click', () => togglePlayPause());
-  $('btn-neu-queue')?.addEventListener('click', () => switchView('radio'));
+
+  // Queue Overlay Drawer & Nav Listeners
+  $('btn-neu-queue')?.addEventListener('click', () => openQueueDrawer());
+  $('nav-queue')?.addEventListener('click', () => openQueueDrawer());
+  $('btn-close-queue')?.addEventListener('click', () => closeQueueDrawer());
+  $('queue-drawer-backdrop')?.addEventListener('click', () => closeQueueDrawer());
+  $('btn-clear-queue')?.addEventListener('click', () => clearQueue());
 
   // Neumorphic Share Button
   $('btn-neu-share')?.addEventListener('click', async () => {
