@@ -12,6 +12,8 @@ const state = {
   isPlaying: false,
   queue: JSON.parse(localStorage.getItem('songbuddy_queue') || '[]'),
   radioQueue: [],
+  radioLoading: false,
+  autoplay: localStorage.getItem('songbuddy_autoplay') !== 'false',
   history: [],
   featuredTracks: [],
   likedTracks: JSON.parse(localStorage.getItem('songbuddy_liked_tracks') || '[]'),
@@ -183,7 +185,7 @@ function onYTPlayerStateChange(event) {
         ytPlayer.playVideo();
       }
     } else {
-      playNextTrack();
+      playNextTrack(false);
     }
   }
 }
@@ -768,7 +770,16 @@ function updateQueueBadge() {
 
   const pill = $('queue-pill-count');
   if (pill) {
-    pill.textContent = `${count} ${count === 1 ? 'track' : 'tracks'}`;
+    const autoCount = state.radioQueue ? state.radioQueue.length : 0;
+    if (count > 0 && autoCount > 0) {
+      pill.textContent = `${count} queued • ${autoCount} auto`;
+    } else if (count > 0) {
+      pill.textContent = `${count} ${count === 1 ? 'track' : 'tracks'}`;
+    } else if (autoCount > 0) {
+      pill.textContent = `${autoCount} recommended`;
+    } else {
+      pill.textContent = '0 tracks';
+    }
   }
 }
 
@@ -786,8 +797,23 @@ function closeQueueDrawer() {
   }
 }
 
+function playRadioTrack(index) {
+  if (index >= 0 && index < state.radioQueue.length) {
+    const track = state.radioQueue.splice(index, 1)[0];
+    renderQueueDrawer();
+    playTrack(track, { startRadio: true });
+    showToastNotification(`Playing: ${track.title} 🎵`);
+  }
+}
+
 function renderQueueDrawer() {
-  // Update Now Playing card inside queue drawer
+  // 1. Synchronize Autoplay Switch
+  const autoplaySwitch = $('queue-autoplay-switch');
+  if (autoplaySwitch) {
+    autoplaySwitch.checked = (state.autoplay !== false);
+  }
+
+  // 2. Update Now Playing card inside queue drawer
   const npTitle = $('queue-np-title');
   const npArtist = $('queue-np-artist');
   const npThumb = $('queue-np-thumb');
@@ -804,82 +830,202 @@ function renderQueueDrawer() {
     if (npEq) npEq.style.opacity = '0.2';
   }
 
-  // Update Next Up list
+  // 3. Update Manual Next Up Queue
   const listContainer = $('queue-items-list');
-  if (!listContainer) return;
-  listContainer.innerHTML = '';
-
+  const manualCountBadge = $('queue-manual-count');
   const clearBtn = $('btn-clear-queue');
+  const manualCount = state.queue ? state.queue.length : 0;
+
   if (clearBtn) {
-    clearBtn.style.display = (state.queue && state.queue.length > 0) ? 'inline-flex' : 'none';
+    clearBtn.style.display = manualCount > 0 ? 'inline-flex' : 'none';
   }
 
-  if (!state.queue || state.queue.length === 0) {
-    listContainer.innerHTML = `
-      <div class="queue-empty-state">
-        <div class="queue-empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26">
-            <line x1="8" y1="6" x2="21" y2="6"></line>
-            <line x1="8" y1="12" x2="21" y2="12"></line>
-            <line x1="8" y1="18" x2="21" y2="18"></line>
-            <circle cx="4" cy="6" r="1.5" fill="currentColor"></circle>
-            <circle cx="4" cy="12" r="1.5" fill="currentColor"></circle>
-            <circle cx="4" cy="18" r="1.5" fill="currentColor"></circle>
-          </svg>
-        </div>
-        <span class="queue-empty-title">Your Queue is Empty</span>
-        <p class="queue-empty-subtitle">Tap the <strong>+</strong> icon on any song in Top Charts or Search to queue it up next.</p>
-      </div>
-    `;
-    return;
-  }
-
-  state.queue.forEach((track, index) => {
-    const item = document.createElement('div');
-    item.className = 'queue-item-row';
-
-    let thumb = track.thumbnail || generateFallbackCover(track.title, track.artist);
-    if (thumb.includes('hq720.jpg')) {
-      thumb = thumb.replace('hq720.jpg', 'hqdefault.jpg');
+  if (manualCountBadge) {
+    if (manualCount > 0) {
+      manualCountBadge.textContent = `${manualCount}`;
+      manualCountBadge.style.display = 'inline-block';
+    } else {
+      manualCountBadge.style.display = 'none';
     }
+  }
 
-    item.innerHTML = `
-      <span class="queue-item-order">${index + 1}</span>
-      <img src="${thumb}" alt="${escapeHTML(track.title)}" class="queue-item-thumb" loading="lazy" onerror="this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');">
-      <div class="queue-item-info">
-        <span class="queue-item-title">${escapeHTML(track.title)}</span>
-        <span class="queue-item-artist">${escapeHTML(track.artist)}</span>
-      </div>
-      <span class="queue-item-time">${track.duration_formatted || '3:30'}</span>
-      <button class="queue-item-play-btn" title="Play Now" aria-label="Play Now">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
-        </svg>
-      </button>
-      <button class="queue-item-remove-btn" title="Remove from queue" aria-label="Remove from queue">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="15" height="15">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
-    `;
+  if (listContainer) {
+    listContainer.innerHTML = '';
+    if (manualCount > 0) {
+      state.queue.forEach((track, index) => {
+        const item = document.createElement('div');
+        item.className = 'queue-item-row';
 
-    item.querySelector('.queue-item-play-btn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      playQueuedTrack(index);
-    });
+        let thumb = track.thumbnail || generateFallbackCover(track.title, track.artist);
+        if (thumb.includes('hq720.jpg')) {
+          thumb = thumb.replace('hq720.jpg', 'hqdefault.jpg');
+        }
 
-    item.querySelector('.queue-item-remove-btn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeFromQueue(index);
-    });
+        item.innerHTML = `
+          <span class="queue-item-order">${index + 1}</span>
+          <img src="${thumb}" alt="${escapeHTML(track.title)}" class="queue-item-thumb" loading="lazy" onerror="this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');">
+          <div class="queue-item-info">
+            <span class="queue-item-title">${escapeHTML(track.title)}</span>
+            <span class="queue-item-artist">${escapeHTML(track.artist)}</span>
+          </div>
+          <span class="queue-item-time">${track.duration_formatted || '3:30'}</span>
+          <button class="queue-item-play-btn" title="Play Now" aria-label="Play Now">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </button>
+          <button class="queue-item-remove-btn" title="Remove from queue" aria-label="Remove from queue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="15" height="15">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        `;
 
-    item.addEventListener('click', () => {
-      playQueuedTrack(index);
-    });
+        item.querySelector('.queue-item-play-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          playQueuedTrack(index);
+        });
 
-    listContainer.appendChild(item);
-  });
+        item.querySelector('.queue-item-remove-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeFromQueue(index);
+        });
+
+        item.addEventListener('click', () => {
+          playQueuedTrack(index);
+        });
+
+        listContainer.appendChild(item);
+      });
+    } else {
+      // Manual queue is empty
+      if (state.radioQueue && state.radioQueue.length > 0) {
+        listContainer.innerHTML = `
+          <div class="queue-manual-empty-hint">
+            Priority queue is empty. Recommended tracks in <strong>Auto Playlist</strong> below will play next.
+          </div>
+        `;
+      } else if (!state.radioLoading) {
+        listContainer.innerHTML = `
+          <div class="queue-empty-state">
+            <div class="queue-empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <circle cx="4" cy="6" r="1.5" fill="currentColor"></circle>
+                <circle cx="4" cy="12" r="1.5" fill="currentColor"></circle>
+                <circle cx="4" cy="18" r="1.5" fill="currentColor"></circle>
+              </svg>
+            </div>
+            <span class="queue-empty-title">Your Queue is Empty</span>
+            <p class="queue-empty-subtitle">Tap the <strong>+</strong> icon on any song in Top Charts or Search to queue it up next.</p>
+          </div>
+        `;
+      }
+    }
+  }
+
+  // 4. Render Auto Playlist Continuous Recommendations
+  const autoListContainer = $('queue-auto-list');
+  const autoHeader = $('queue-auto-header');
+  const autoDesc = $('queue-auto-desc');
+
+  if (autoListContainer) {
+    autoListContainer.innerHTML = '';
+
+    if (state.radioLoading) {
+      if (autoHeader) autoHeader.style.display = 'flex';
+      autoListContainer.innerHTML = `
+        <div class="queue-auto-loading">
+          <div class="queue-auto-spinner"></div>
+          <span>Curating continuous recommendations...</span>
+        </div>
+      `;
+    } else if (state.radioQueue && state.radioQueue.length > 0) {
+      if (autoHeader) autoHeader.style.display = 'flex';
+      if (autoDesc) {
+        autoDesc.textContent = state.currentTrack
+          ? `Continuous radio matching "${state.currentTrack.title}" vibe`
+          : 'Continuous radio recommendations';
+      }
+
+      state.radioQueue.forEach((track, index) => {
+        const row = document.createElement('div');
+        row.className = 'queue-auto-row';
+
+        let thumb = track.thumbnail || generateFallbackCover(track.title, track.artist);
+        if (thumb.includes('hq720.jpg')) {
+          thumb = thumb.replace('hq720.jpg', 'hqdefault.jpg');
+        }
+
+        row.innerHTML = `
+          <span class="queue-auto-icon" title="Recommended Song">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+          </span>
+          <img src="${thumb}" alt="${escapeHTML(track.title)}" class="queue-item-thumb" loading="lazy" onerror="this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');">
+          <div class="queue-item-info">
+            <span class="queue-item-title">${escapeHTML(track.title)}</span>
+            <span class="queue-item-artist">${escapeHTML(track.artist)}</span>
+          </div>
+          <span class="queue-item-time">${track.duration_formatted || '3:30'}</span>
+          <button class="queue-item-play-btn" title="Play Now" aria-label="Play Now">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </button>
+          <button class="queue-item-add-btn" title="Add to Priority Queue" aria-label="Add to Queue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="15" height="15">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        `;
+
+        row.querySelector('.queue-item-play-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          playRadioTrack(index);
+        });
+
+        row.querySelector('.queue-item-add-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const added = state.radioQueue.splice(index, 1)[0];
+          if (added) {
+            addToQueue(added);
+          }
+        });
+
+        row.addEventListener('click', () => {
+          playRadioTrack(index);
+        });
+
+        autoListContainer.appendChild(row);
+      });
+    } else {
+      if (autoHeader) autoHeader.style.display = 'none';
+      if (state.currentTrack && !state.radioLoading) {
+        loadRadioQueue(state.currentTrack.id);
+      }
+    }
+  }
+
+  // 5. Update header pill count: manual + auto
+  const pill = $('queue-pill-count');
+  if (pill) {
+    const autoCount = state.radioQueue ? state.radioQueue.length : 0;
+    if (manualCount > 0 && autoCount > 0) {
+      pill.textContent = `${manualCount} queued • ${autoCount} auto`;
+    } else if (manualCount > 0) {
+      pill.textContent = `${manualCount} ${manualCount === 1 ? 'track' : 'tracks'}`;
+    } else if (autoCount > 0) {
+      pill.textContent = `${autoCount} recommended`;
+    } else {
+      pill.textContent = '0 tracks';
+    }
+  }
 }
 
 // ============================================================================
@@ -1079,7 +1225,7 @@ function togglePlayPause() {
   }
 }
 
-function playNextTrack() {
+function playNextTrack(isManual = false) {
   if (state.queue && state.queue.length > 0) {
     const next = state.isShuffle
       ? state.queue.splice(Math.floor(Math.random() * state.queue.length), 1)[0]
@@ -1088,15 +1234,24 @@ function playNextTrack() {
     updateQueueBadge();
     renderQueueDrawer();
     playTrack(next, { startRadio: false });
-  } else if (state.radioQueue && state.radioQueue.length > 0) {
+    showToastNotification(`Playing from queue: ${next.title} 🎵`);
+  } else if ((state.autoplay !== false || isManual) && state.radioQueue && state.radioQueue.length > 0) {
+    // Auto Playlist: Seamlessly autoplay next recommended track & keep radio feed flowing
     const next = state.isShuffle
       ? state.radioQueue.splice(Math.floor(Math.random() * state.radioQueue.length), 1)[0]
       : state.radioQueue.shift();
-    playTrack(next, { startRadio: false });
-  } else if (state.featuredTracks.length > 0) {
+    updateQueueBadge();
+    renderQueueDrawer();
+    // Pass { startRadio: true } so the new song seeds the next set of recommendations!
+    playTrack(next, { startRadio: true });
+    showToastNotification(`Autoplaying recommendation: ${next.title} 📻`);
+  } else if ((state.autoplay !== false || isManual) && state.featuredTracks.length > 0) {
     const currentIdx = state.featuredTracks.findIndex(t => t.id === state.currentTrack?.id);
     const nextIdx = (currentIdx + 1) % state.featuredTracks.length;
-    playTrack(state.featuredTracks[nextIdx]);
+    playTrack(state.featuredTracks[nextIdx], { startRadio: true });
+  } else if (state.autoplay === false && !isManual) {
+    state.isPlaying = false;
+    updatePlayPauseIcons(false);
   }
 }
 
@@ -1119,19 +1274,57 @@ function playPrevTrack() {
 }
 
 // ============================================================================
-// Radio & Automix
+// Radio & Automix (Auto Playlist Recommendation Driver)
 // ============================================================================
 async function loadRadioQueue(seedId) {
+  if (!seedId) return;
+  state.radioLoading = true;
+  renderQueueDrawer();
+
   try {
     const res = await fetch(`/api/radio?id=${encodeURIComponent(seedId)}`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      state.radioLoading = false;
+      renderQueueDrawer();
+      return;
+    }
     const tracks = await res.json();
-    state.radioQueue = tracks;
 
+    // 1. Exclude the seed track itself so it never repeats the current song
+    let filtered = Array.isArray(tracks) ? tracks.filter(t => t && t.id && t.id !== seedId) : [];
+
+    // 2. Intelligent discovery fallback if automix returns fewer than 6 songs
+    if (filtered.length < 6 && state.currentTrack) {
+      try {
+        const queryTerm = state.currentTrack.artist
+          ? `${state.currentTrack.artist} top hits`
+          : 'Trending Music Hits';
+        const searchRes = await fetch(`/api/search?q=${encodeURIComponent(queryTerm)}`);
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (Array.isArray(searchData)) {
+            const existingIds = new Set([seedId, ...filtered.map(t => t.id)]);
+            searchData.forEach(st => {
+              if (st && st.id && !existingIds.has(st.id)) {
+                existingIds.add(st.id);
+                filtered.push(st);
+              }
+            });
+          }
+        }
+      } catch (fbErr) {
+        console.warn('[Discovery fallback error]:', fbErr);
+      }
+    }
+
+    state.radioQueue = filtered;
+    state.radioLoading = false;
+
+    // Update Radio Automix view if user navigated there
     const list = $('radio-tracks-list');
     if (list) {
       list.innerHTML = '';
-      tracks.forEach((track, idx) => {
+      state.radioQueue.forEach((track, idx) => {
         const row = createTrackRow(track, idx + 1);
         list.appendChild(row);
       });
@@ -1141,8 +1334,14 @@ async function loadRadioQueue(seedId) {
     if (radioHeading && state.currentTrack) {
       radioHeading.textContent = `Automix: ${state.currentTrack.title}`;
     }
+
+    // Refresh Queue Drawer badge and recommended song list
+    updateQueueBadge();
+    renderQueueDrawer();
   } catch (err) {
     console.warn('[Automix error]:', err);
+    state.radioLoading = false;
+    renderQueueDrawer();
   }
 }
 
@@ -1579,7 +1778,7 @@ function setupAudioListeners() {
         audio.currentTime = 0;
         audio.play();
       } else {
-        playNextTrack();
+        playNextTrack(false);
       }
     }
   });
@@ -1737,7 +1936,7 @@ function setupEventListeners() {
 
   // Player Controls
   $('btn-ctrl-play')?.addEventListener('click', togglePlayPause);
-  $('btn-ctrl-next')?.addEventListener('click', playNextTrack);
+  $('btn-ctrl-next')?.addEventListener('click', () => playNextTrack(true));
   $('btn-ctrl-prev')?.addEventListener('click', playPrevTrack);
 
   $('btn-ctrl-shuffle')?.addEventListener('click', () => {
@@ -1867,6 +2066,18 @@ function setupEventListeners() {
   $('btn-close-queue')?.addEventListener('click', () => closeQueueDrawer());
   $('queue-drawer-backdrop')?.addEventListener('click', () => closeQueueDrawer());
   $('btn-clear-queue')?.addEventListener('click', () => clearQueue());
+
+  // Autoplay Switch in Queue Drawer
+  const autoplaySwitch = $('queue-autoplay-switch');
+  if (autoplaySwitch) {
+    autoplaySwitch.checked = (state.autoplay !== false);
+    autoplaySwitch.addEventListener('change', (e) => {
+      state.autoplay = e.target.checked;
+      localStorage.setItem('songbuddy_autoplay', state.autoplay ? 'true' : 'false');
+      showToastNotification(`Autoplay ${state.autoplay ? 'Enabled 📻' : 'Disabled ⏸️'}`);
+      renderQueueDrawer();
+    });
+  }
 
   // Neumorphic Share Button
   $('btn-neu-share')?.addEventListener('click', async () => {
