@@ -19,6 +19,7 @@ downloads/
 *.key
 *.crt
 users.json
+revoked_tokens.json
 *.log
 cookies.txt
 *cookie*.txt

@@ -17,6 +17,7 @@ ENV/
 *.key
 *.crt
 users.json
+revoked_tokens.json
 cookies.txt
 *cookie*.txt
 
