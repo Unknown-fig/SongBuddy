@@ -17,6 +17,8 @@ ENV/
 *.key
 *.crt
 users.json
+cookies.txt
+*cookie*.txt
 
 # Test & Coverage artifacts
 .pytest_cache/

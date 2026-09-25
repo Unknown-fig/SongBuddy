@@ -102,6 +102,17 @@
               </svg>
               <span class="nav-label">Favourites</span>
             </li>
+            <li class="nav-item" data-view="queue" id="nav-queue">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <circle cx="4" cy="6" r="1.5" fill="currentColor"></circle>
+                <circle cx="4" cy="12" r="1.5" fill="currentColor"></circle>
+                <circle cx="4" cy="18" r="1.5" fill="currentColor"></circle>
+              </svg>
+              <span class="nav-label">Play Queue</span>
+            </li>
             <li class="nav-item" data-view="local">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
@@ -286,6 +297,13 @@
               <button class="btn btn-accent" id="hero-listen-btn">
                 <span>Listen Now</span>
               </button>
+              <button class="btn btn-secondary hero-queue-btn" id="hero-queue-btn" title="Add Featured Song to Queue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Add to Queue</span>
+              </button>
               <button class="btn-circle btn-heart" id="hero-heart-btn" title="Add to Favourites">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
@@ -444,7 +462,7 @@
           </svg>
         </div>
         <h3 class="neu-panel-title">Play Music</h3>
-        <button class="neu-menu-btn" id="btn-neu-queue" title="Now Playing Queue / Flow">
+        <button class="neu-menu-btn" id="btn-neu-queue" title="Now Playing Queue / Up Next" style="position: relative;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="20" height="20">
             <line x1="8" y1="6" x2="21" y2="6"></line>
             <line x1="8" y1="12" x2="21" y2="12"></line>
@@ -453,6 +471,7 @@
             <circle cx="4" cy="12" r="1.5" fill="currentColor"></circle>
             <circle cx="4" cy="18" r="1.5" fill="currentColor"></circle>
           </svg>
+          <span class="queue-badge hidden" id="queue-count-badge">0</span>
         </button>
       </div>
 
@@ -665,6 +684,70 @@
   </div>
 
   <!-- ====================================================================
+       PLAY QUEUE DRAWER / MODAL (UP NEXT WORKSTATION)
+       ==================================================================== -->
+  <div id="queue-drawer-overlay" class="queue-drawer-overlay hidden" aria-modal="true" role="dialog" aria-label="Playback Queue">
+    <div class="queue-drawer-backdrop" id="queue-drawer-backdrop"></div>
+    <div class="queue-drawer-card">
+      <div class="queue-drawer-header">
+        <div class="queue-header-left">
+          <div class="queue-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="20" height="20">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <circle cx="4" cy="6" r="1.5" fill="currentColor"></circle>
+              <circle cx="4" cy="12" r="1.5" fill="currentColor"></circle>
+              <circle cx="4" cy="18" r="1.5" fill="currentColor"></circle>
+            </svg>
+          </div>
+          <div class="queue-header-titles">
+            <h3 class="queue-drawer-title">Play Queue</h3>
+            <span class="queue-pill-count" id="queue-pill-count">0 tracks</span>
+          </div>
+        </div>
+        <div class="queue-header-actions">
+          <button type="button" class="btn-clear-queue" id="btn-clear-queue" title="Clear all queued songs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            <span>Clear</span>
+          </button>
+          <button type="button" class="close-overlay-btn" id="btn-close-queue" title="Close Queue">&times;</button>
+        </div>
+      </div>
+
+      <div class="queue-drawer-body">
+        <!-- Now Playing Card -->
+        <div class="queue-section-header">
+          <span class="queue-section-label">NOW PLAYING</span>
+        </div>
+        <div class="queue-now-playing-card" id="queue-now-playing-card">
+          <img id="queue-np-thumb" src="/assets/artists/travis_scott.jpg" alt="Now Playing" class="queue-np-thumb" onerror="this.onerror=null;this.src='/assets/artists/travis_scott.jpg';">
+          <div class="queue-np-info">
+            <span class="queue-np-title" id="queue-np-title">Butterfly Effect</span>
+            <span class="queue-np-artist" id="queue-np-artist">Travis Scott</span>
+          </div>
+          <div class="queue-np-eq" id="queue-np-eq">
+            <span class="q-bar bar-1"></span>
+            <span class="q-bar bar-2"></span>
+            <span class="q-bar bar-3"></span>
+          </div>
+        </div>
+
+        <!-- Next Up Queue Section -->
+        <div class="queue-section-header queue-next-header">
+          <span class="queue-section-label">NEXT UP IN QUEUE</span>
+        </div>
+        <div class="queue-items-list" id="queue-items-list">
+          <!-- Rendered dynamically via JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
        AUTHENTICATION & LOGIN OVERLAY (GROOVVY STUDIO ACCESS)
        ==================================================================== -->
   <div id="auth-overlay" class="auth-overlay hidden" aria-modal="true" role="dialog">
@@ -835,6 +918,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=21"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
