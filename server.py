@@ -331,14 +331,14 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
         with EXTRACTION_SEMAPHORE:
             url = f"https://www.youtube.com/watch?v={video_id}"
             ydl_opts = {
-                'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'format': 'bestaudio/best',
                 'quiet': True,
                 'noplaylist': True,
                 'no_warnings': True,
             }
 
-            # Optional custom player clients if explicitly configured via environment
-            clients_env = os.getenv("YOUTUBE_PLAYER_CLIENTS", "")
+            # Mobile/embedded clients bypass bot verification checks on cloud datacenter IPs (Vercel/AWS)
+            clients_env = os.getenv("YOUTUBE_PLAYER_CLIENTS", "android,ios")
             player_clients = [c.strip() for c in clients_env.split(",") if c.strip()]
             if player_clients:
                 ydl_opts['extractor_args'] = {
