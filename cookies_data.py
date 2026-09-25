@@ -6,7 +6,7 @@ EMBEDDED_COOKIES = """# Netscape HTTP Cookie File
 # https://curl.haxx.se/rfc/cookie_spec.html
 # This is a generated file! Do not edit.
 
-www.youtube.com\tFALSE\t/\tFALSE\t1824829547\text_name\tojplmecpdpgccookcobabopnaifgidhf
+www.youtube.com\tFALSE\t/\tFALSE\t1824903489\text_name\tojplmecpdpgccookcobabopnaifgidhf
 .youtube.com\tTRUE\t/\tTRUE\t1817295731\tLOGIN_INFO\tAFmmF2swRQIgdtjiI3gqt7XX-gHfo8l4o8A2HtV_9wYiSwGZPv5EmasCIQCyxJTmGtF51rJZnYHs2ofZAeBUwZEdhYYIrbeWSI0b-A:QUQ3MjNmeFl2bUpsRXhjZ2hhMHBjTE5YTkVTbXlIc0N0VHVFZWtWekJrWFdBZWt6RGJ2Z0xlYUZETTZmWDZYOW84QlM2dERubFVwU0d1SThrZWROR3BsRno4TnBHR0NRaUZPQ0Itd1dTYmVicHFtY082Um9oWjFrZjUtbWdDRFRiaktLWlNCUDVXNFg2UUFPbWVmbzkxNEg1b2dHVDJ1R09R
 .youtube.com\tTRUE\t/\tFALSE\t1821254419\t_ga\tGA1.1.1538350583.1785517332
 .youtube.com\tTRUE\t/\tFALSE\t1793293331\t_gcl_au\t1.1.1880974044.1785517331.-.-.1786694419.1208949757.1786694419.1786694419
@@ -20,19 +20,19 @@ www.youtube.com\tFALSE\t/\tFALSE\t1824829547\text_name\tojplmecpdpgccookcobabopn
 .youtube.com\tTRUE\t/\tTRUE\t1824049869\tSAPISID\tusICs-jK7VO1F0Rr/AUOVNY3sXCuaMxCxY
 .youtube.com\tTRUE\t/\tTRUE\t1824049869\t__Secure-1PAPISID\tusICs-jK7VO1F0Rr/AUOVNY3sXCuaMxCxY
 .youtube.com\tTRUE\t/\tTRUE\t1824049869\t__Secure-3PAPISID\tusICs-jK7VO1F0Rr/AUOVNY3sXCuaMxCxY
-.youtube.com\tTRUE\t/\tTRUE\t1824829549\tPREF\tf6=40000000&f7=900&tz=Asia.Calcutta&f4=4000000
-.youtube.com\tTRUE\t/\tTRUE\t1821805177\t__Secure-1PSIDTS\tsidts-CjQBkldj_7jdc1q9p1nV8Z-8FzmqcDQebdO0UrSydf8Q79SCEFXy_gPBZSbddCh5SlR8yvhmEAA
-.youtube.com\tTRUE\t/\tTRUE\t1821805177\t__Secure-3PSIDTS\tsidts-CjQBkldj_7jdc1q9p1nV8Z-8FzmqcDQebdO0UrSydf8Q79SCEFXy_gPBZSbddCh5SlR8yvhmEAA
-.youtube.com\tTRUE\t/\tFALSE\t1821805552\tSIDCC\tAKEyXzUEfX746xjoUHIarTjf_ISRCyScqLpxRFpyVjDnkEsDvOJ1HNvTJPIs5RSC7EzjtV1sj-8
-.youtube.com\tTRUE\t/\tTRUE\t1821805552\t__Secure-1PSIDCC\tAKEyXzX8OKd6OcEFll5MlCa3yVffJGhg0sJcsqolhnMvGJ0S_oZbBdSNy0WYfQHIUMSBQJVVSw
-.youtube.com\tTRUE\t/\tTRUE\t1821805552\t__Secure-3PSIDCC\tAKEyXzU8nGYPv6Qyndxp4iwja8KNkomsXfD0f68ML2TOeAJ1VY3h_igVYd0IY77RalrzDmChVA
-.youtube.com\tTRUE\t/\tTRUE\t1805821548\tVISITOR_INFO1_LIVE\tEIE9OVJq8Ek
-.youtube.com\tTRUE\t/\tTRUE\t1805821548\tVISITOR_PRIVACY_METADATA\tCgJJThIEGgAgLg%3D%3D
+.youtube.com\tTRUE\t/\tTRUE\t1824903776\tPREF\tf6=40000000&f7=900&tz=Asia.Calcutta&f4=4000000
+.youtube.com\tTRUE\t/\tTRUE\t1821884953\t__Secure-1PSIDTS\tsidts-CjQBkldj_5oZMrfjxanaNUK5yt3rVSJ_YjCxvjAIjN2VC9KEBFCZn_HCC0FdzkUFQYTDHldbEAA
+.youtube.com\tTRUE\t/\tTRUE\t1821884953\t__Secure-3PSIDTS\tsidts-CjQBkldj_5oZMrfjxanaNUK5yt3rVSJ_YjCxvjAIjN2VC9KEBFCZn_HCC0FdzkUFQYTDHldbEAA
+.youtube.com\tTRUE\t/\tFALSE\t1821885053\tSIDCC\tAKEyXzUoJQ__c1CHHtftDbz7x73SkxLWfzKCk568raJPU5cCLg2z3xoCvZ0fh-Z-O3NEuPgn5_4
+.youtube.com\tTRUE\t/\tTRUE\t1821885053\t__Secure-1PSIDCC\tAKEyXzXU6OoKGYFvOsuMdjXvrw2znN02609uViqbw5LJpmBIq13j1rXOl3CvBMl3EnnICgGoUQ
+.youtube.com\tTRUE\t/\tTRUE\t1821885053\t__Secure-3PSIDCC\tAKEyXzWycCyrFrrEAkeyTNFNyTtarehx4Jj1Lf8AdP84Oz9dI1rLItPHKG1Hdo2xZkwdgC8z7A
+.youtube.com\tTRUE\t/\tTRUE\t1805895517\tVISITOR_INFO1_LIVE\tEIE9OVJq8Ek
+.youtube.com\tTRUE\t/\tTRUE\t1805895517\tVISITOR_PRIVACY_METADATA\tCgJJThIEGgAgLg%3D%3D
 .youtube.com\tTRUE\t/\tTRUE\t1796306306\tVISITOR_INFO1_LIVE\tnJGd_Z6ZYvc
 .youtube.com\tTRUE\t/\tTRUE\t1796306306\tVISITOR_PRIVACY_METADATA\tCgJJThIEGgAgFA%3D%3D
 .youtube.com\tTRUE\t/\tTRUE\t1803551131\t__Secure-ROLLOUT_TOKEN\tCJPAk-n-o9vmzwEQ5ciw4OLylAMYpIPL5s_FlgM%3D
 .youtube.com\tTRUE\t/\tTRUE\t1803551267\t__Secure-YNID\t21.YT=prfNuT3wTjhD85WvxQIU5LKihvt2pHVjloNx_FVUyGbGAgMawx6dQXE5jIUtpfu_uY8DNBng8jPMssdIXWBX1rmBc7qAyMx_Sspx_B_GttwyHaB4DJ9OlHzz2u3pJi9SpuB304GFVoY-7GrlNlUgV0JmcR83euOQ6ff_4qO4VzuChL8c1Bf8-GWbF2xy7oKfas3ogPSFNLblBHfNjMcFi6KlNsHt5jl0pX55Zqv1ZsHfpy7arB_bOa5xsBxvhuwZxIoJySRwz6gQXEA0k0EUMO4HkKtyTNpimC_I3zbCtstN_6QRxq7uxtNstZBPHyr4B3NijyZ67Dj8hkYfEEDViQ
-.youtube.com\tTRUE\t/\tTRUE\t0\tYSC\t6xbAiBKDPtM
 .youtube.com\tTRUE\t/\tTRUE\t1805821349\t__Secure-YNID\t22.YT=RKV6iHf_Ua0MwzVECks0I0JjzmwAqQFcKKmVbntXu_3i9BOIM3OGhLTbB_pAeKRp8fxH2hov8z59EqcA86tMqf7BHGsNjzqzSCcmixOn963drgg2y4w2UPk2qvSFdiPWt9oMliIoxivzwXC1QuR_y_enYx6O6efyOHADkC9A4JRREc9OC2VD-SG_suw_Z40iDUTF4U6Mf3QZ0_aD3OgqMyqpZcCHA6XfrleRWfmTqAaz_ROB18JnnHriaMchHTwLHqqWj0wr8q7npEB4GVqNtxXN0OzIiIm6nEpF94E9C7wNJ9WPZCoQMgwNzvszMnOrl8n4WCBulx9ZRB7Sh7zRJA
 .youtube.com\tTRUE\t/\tTRUE\t1805821349\t__Secure-ROLLOUT_TOKEN\tCISK5sa98ZCGCxDprejXsuuUAxivu8SE2YeXAw%3D%3D
+.youtube.com\tTRUE\t/\tTRUE\t0\tYSC\tVEkEJYYq9Hg
 """
