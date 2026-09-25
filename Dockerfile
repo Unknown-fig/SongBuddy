@@ -40,7 +40,7 @@ EXPOSE 8000
 
 # 7. Native Container Health Check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+    CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=4).getcode() == 200 else 1)" || curl -f http://localhost:8000/api/health || exit 1
 
 # 8. Run as non-root user
 USER songbuddy

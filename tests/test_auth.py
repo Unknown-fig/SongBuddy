@@ -33,6 +33,26 @@ def test_jwt_token_revocation():
     # Verification should now fail
     assert auth_manager.verify_token(token) is None
 
+def test_multi_instance_token_revocation(tmp_path):
+    """Verify token revoked on one instance is recognized across workers/instances via persistence."""
+    from auth import AuthManager
+    revoked_file = tmp_path / "revoked_tokens.json"
+    
+    worker1 = AuthManager()
+    worker1.file_path = revoked_file
+    
+    worker2 = AuthManager()
+    worker2.file_path = revoked_file
+    
+    token = worker1.create_access_token("user_shared")
+    assert worker2.verify_token(token) is not None
+    
+    # Worker 1 revokes token
+    worker1.revoke_token(token)
+    
+    # Worker 2 must recognize the revocation
+    assert worker2.verify_token(token) is None
+
 def test_extract_bearer_token():
     assert extract_bearer_token("Bearer abc123xyz") == "abc123xyz"
     assert extract_bearer_token("bearer  my_token ") == "my_token"

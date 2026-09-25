@@ -51,3 +51,31 @@ def test_config_stable_secret_in_production(monkeypatch):
     k2 = get_or_create_secret_key()
     assert k1 == k2
     assert len(k1) >= 32
+
+@pytest.mark.unit
+def test_placeholder_secret_key_rejected(monkeypatch):
+    """Verify placeholder template string is rejected and not treated as valid key."""
+    from config import is_valid_secret_key, get_or_create_secret_key
+    
+    # 39-char placeholder from .env.example
+    assert is_valid_secret_key("generate-with-secrets.token_urlsafe(32)") is False
+    assert is_valid_secret_key("your-secret-key-here-must-be-at-least-32-chars") is False
+    assert is_valid_secret_key("change-me-to-a-secure-random-secret-key-32-chars") is False
+    assert is_valid_secret_key("short_key") is False
+    assert is_valid_secret_key("a" * 32) is True
+
+    # When placeholder is in env, get_or_create_secret_key generates or derives secure key
+    monkeypatch.setenv("SECRET_KEY", "generate-with-secrets.token_urlsafe(32)")
+    key = get_or_create_secret_key()
+    assert key != "generate-with-secrets.token_urlsafe(32)"
+    assert len(key) >= 32
+
+@pytest.mark.unit
+def test_validate_environment_optional_spotify(monkeypatch):
+    """Verify validate_environment does not raise error when Spotify credentials are not set."""
+    from config import validate_environment
+    monkeypatch.delenv("SPOTIPY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("SPOTIPY_CLIENT_SECRET", raising=False)
+    
+    # Should complete without EnvironmentError
+    validate_environment()

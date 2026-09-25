@@ -9,17 +9,19 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - PORT=8000
       - HOST=0.0.0.0
       - ENVIRONMENT=development
-      - LOG_LEVEL=INFO
-      - REQUIRE_AUTH=false
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
     volumes:
       - ./downloads:/app/downloads
       - ./public:/app/public:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=4).getcode() == 200 else 1)\" || curl -f http://localhost:8000/api/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
