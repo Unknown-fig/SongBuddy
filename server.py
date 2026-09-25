@@ -963,7 +963,7 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 stream_url = stream_info["stream_url"]
             except Exception as e:
                 logger.error(f"Failed to resolve stream for {vid}: {e}")
-                self.send_json_error(502, f"Audio stream extraction failed for track {vid}. Stream is unavailable.")
+                self.send_json_error(502, f"Audio stream extraction failed for track {vid}: {str(e)}")
                 return
 
             # On Vercel or when redirect requested: redirect to avoid serverless 10s function timeout
