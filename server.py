@@ -588,10 +588,23 @@ def fetch_automix_radio(video_id: str) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error fetching YouTube Music Automix for {video_id}: {e}")
 
+    # Exclude seed video itself from recommendations so autoplay won't immediately repeat the current track
+    tracks = [t for t in tracks if t.get("id") and t.get("id") != video_id]
+
+    # Deduplicate tracks while preserving order
+    seen_ids = set()
+    deduped_tracks = []
+    for t in tracks:
+        tid = t.get("id")
+        if tid and tid not in seen_ids:
+            seen_ids.add(tid)
+            deduped_tracks.append(t)
+    tracks = deduped_tracks
+
     if len(tracks) < 5:
         logger.info(f"Automix yielded only {len(tracks)} tracks. Falling back to discovery search.")
         fallback_tracks = search_tracks("Best Trending Music Hits", limit=20)
-        tracks = tracks + [t for t in fallback_tracks if t["id"] not in [x["id"] for x in tracks]]
+        tracks = tracks + [t for t in fallback_tracks if t["id"] not in [x["id"] for x in tracks] and t["id"] != video_id]
 
     RADIO_CACHE.set(video_id, tracks)
     return tracks

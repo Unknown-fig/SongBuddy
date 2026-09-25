@@ -707,6 +707,11 @@
           </div>
         </div>
         <div class="queue-header-actions">
+          <label class="queue-autoplay-toggle" title="Autoplay similar songs continuously when queue ends">
+            <input type="checkbox" id="queue-autoplay-switch" checked>
+            <span class="queue-autoplay-slider"></span>
+            <span>Autoplay</span>
+          </label>
           <button type="button" class="btn-clear-queue" id="btn-clear-queue" title="Clear all queued songs">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -739,8 +744,26 @@
         <!-- Next Up Queue Section -->
         <div class="queue-section-header queue-next-header">
           <span class="queue-section-label">NEXT UP IN QUEUE</span>
+          <span class="queue-section-count" id="queue-manual-count" style="display:none;">0</span>
         </div>
         <div class="queue-items-list" id="queue-items-list">
+          <!-- Rendered dynamically via JavaScript -->
+        </div>
+
+        <!-- Auto Playlist Section (Continuous Recommendations) -->
+        <div class="queue-auto-header" id="queue-auto-header">
+          <div class="queue-auto-title-row">
+            <span class="queue-section-label">AUTO PLAYLIST</span>
+            <span class="queue-auto-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              </svg>
+              Continuous Radio
+            </span>
+          </div>
+          <span class="queue-auto-desc" id="queue-auto-desc">Recommended songs matching your vibe</span>
+        </div>
+        <div class="queue-auto-list" id="queue-auto-list">
           <!-- Rendered dynamically via JavaScript -->
         </div>
       </div>
@@ -918,6 +941,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=27"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>
