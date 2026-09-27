@@ -2803,17 +2803,51 @@ function setupEventListeners() {
 
   // Global Keyboard Shortcuts
   window.addEventListener('keydown', (e) => {
+    const isEditing = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
+
+    // 1. Ctrl + K -> Focus Search
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       searchInput?.focus();
       searchInput?.select();
-    } else if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      return;
+    }
+
+    // 2. Ctrl + N -> Next Track
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'n' || e.code === 'KeyN')) {
       e.preventDefault();
-      togglePlayPause();
-    } else if ((e.key === 'f' || e.key === 'F' || e.key === 'c' || e.key === 'C') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      showToastNotification('Next Track ⏭ (Ctrl + N)');
+      playNextTrack(true);
+      return;
+    }
+
+    // 3. Ctrl + B -> Back / Previous Track
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'b' || e.code === 'KeyB')) {
       e.preventDefault();
-      toggleCinemaAmbilight();
-    } else if (e.key === 'Escape') {
+      showToastNotification('Previous Track ⏮ (Ctrl + B)');
+      playPrevTrack();
+      return;
+    }
+
+    // 4. Single-key shortcuts (when not focused on a text input)
+    if (!isEditing) {
+      // 'P' or 'Space' -> Play / Pause
+      if (e.key.toLowerCase() === 'p' || e.code === 'Space') {
+        e.preventDefault();
+        togglePlayPause();
+        return;
+      }
+
+      // 'F' or 'C' -> TV Mode
+      if (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        toggleCinemaAmbilight();
+        return;
+      }
+    }
+
+    // 5. Escape -> Close any open modals
+    if (e.key === 'Escape') {
       closeQueueDrawer();
       closeLyrics();
       closeCinemaAmbilight();
