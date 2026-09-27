@@ -3409,15 +3409,63 @@ svg {
   border-color: transparent;
 }
 
-/* 8. Subtle Clay Signature Caption */
+/* 8. Subtle Clay Signature Caption / Watermark */
 .neu-footer-caption {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #52796f;
+  text-align: center;
+  letter-spacing: 0.6px;
+  margin-top: 4px;
+  opacity: 0.9;
+  user-select: none;
+}
+
+[data-theme="dark"] .neu-footer-caption {
+  color: #94a3b8;
+}
+
+/* Feed Footer Watermark at end of page */
+.feed-footer-watermark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 0 28px;
+  width: 100%;
+}
+
+.watermark-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  background: var(--neu-base);
+  box-shadow: var(--neu-shadow-raised-sm);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #52796f;
+  letter-spacing: 0.4px;
+  user-select: none;
+}
+
+[data-theme="dark"] .watermark-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-watermark {
   font-size: 0.68rem;
   font-weight: 600;
-  color: #7c8e84;
+  color: var(--text-muted);
   text-align: center;
-  letter-spacing: 0.8px;
-  margin-top: 4px;
-  opacity: 0.8;
+  margin-top: 8px;
+  letter-spacing: 0.4px;
+  opacity: 0.75;
+  user-select: none;
 }
 
 /* 9. Floating Dynamic Toast */
