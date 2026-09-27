@@ -32,6 +32,8 @@ const state = {
   lastSearchResults: [],
   activeSearchFilter: 'all',
   currentHeroIndex: 0,
+  screenOffPlayback: localStorage.getItem('songbuddy_screenoff') !== 'false',
+  keepScreenAwake: localStorage.getItem('songbuddy_keepawake') === 'true',
   user: JSON.parse(localStorage.getItem('songbuddy_user') || 'null')
 };
 
@@ -175,10 +177,32 @@ function onYTPlayerStateChange(event) {
     state.isPlaying = true;
     updatePlayPauseIcons(true);
     startYTProgressTracker();
+    enableBackgroundAudioSession();
+    if (state.currentTrack) updateMediaSession(state.currentTrack);
   } else if (event.data === 2) {
+    // If paused because screen was locked / turned off, and screen-off playback is enabled:
+    if (document.hidden && state.isPlaying && state.screenOffPlayback) {
+      console.log('[SongBuddy] Screen turned off. Keeping audio active in background...');
+      enableBackgroundAudioSession();
+      if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+        setTimeout(() => {
+          if (state.isPlaying) {
+            try { ytPlayer.playVideo(); } catch (e) {}
+          }
+        }, 80);
+      }
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
+      return;
+    }
     state.isPlaying = false;
     updatePlayPauseIcons(false);
     stopYTProgressTracker();
+    stopBackgroundAudioSession();
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'paused';
+    }
   } else if (event.data === 0) {
     stopYTProgressTracker();
     if (state.isRepeat) {
@@ -218,6 +242,7 @@ function updateProgressUI(cur, dur) {
     if (cinFill) cinFill.style.width = `${pct}%`;
   }
   updateLyricsSync(cur);
+  syncMediaSessionPosition(cur, dur);
 }
 
 function startYTProgressTracker() {
@@ -555,6 +580,7 @@ async function initApp() {
   setupEventListeners();
   setupAudioListeners();
   setupMediaSession();
+  updateScreenOffUI();
   initPWA();
 
   // Load live trending tracks from server
@@ -2307,25 +2333,145 @@ function syncCinemaTrack(track) {
 }
 
 // ============================================================================
-// MediaSession Integration
+// MediaSession Integration & Background Audio Engine (Runs when Display is Off)
 // ============================================================================
+const SILENT_AUDIO_DATA = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+function enableBackgroundAudioSession() {
+  if (!state.screenOffPlayback) return;
+  let bgKeeper = $('bg-audio-keeper');
+  if (!bgKeeper) {
+    bgKeeper = document.createElement('audio');
+    bgKeeper.id = 'bg-audio-keeper';
+    bgKeeper.preload = 'auto';
+    bgKeeper.loop = true;
+    bgKeeper.setAttribute('playsinline', '');
+    bgKeeper.setAttribute('webkit-playsinline', '');
+    bgKeeper.setAttribute('x-webkit-airplay', 'allow');
+    document.body.appendChild(bgKeeper);
+  }
+  if (!bgKeeper.src || !bgKeeper.src.startsWith('data:audio/wav')) {
+    bgKeeper.src = SILENT_AUDIO_DATA;
+  }
+  bgKeeper.volume = 0.01;
+  bgKeeper.play().catch(() => {});
+}
+
+function stopBackgroundAudioSession() {
+  const bgKeeper = $('bg-audio-keeper');
+  if (bgKeeper) {
+    try { bgKeeper.pause(); } catch (e) {}
+  }
+}
+
+// Screen Wake Lock Controller
+let wakeLockSentinel = null;
+async function requestScreenWakeLock() {
+  if ('wakeLock' in navigator && (state.keepScreenAwake || state.cinemaMode)) {
+    try {
+      wakeLockSentinel = await navigator.wakeLock.request('screen');
+      console.log('[SongBuddy] Screen Wake Lock active');
+      wakeLockSentinel.addEventListener('release', () => {
+        wakeLockSentinel = null;
+      });
+    } catch (err) {
+      console.warn('[SongBuddy] Wake lock error:', err);
+    }
+  }
+}
+
+function releaseScreenWakeLock() {
+  if (wakeLockSentinel && !state.keepScreenAwake && !state.cinemaMode) {
+    try { wakeLockSentinel.release(); } catch (e) {}
+    wakeLockSentinel = null;
+  }
+}
+
+function toggleScreenOffMode() {
+  state.screenOffPlayback = !state.screenOffPlayback;
+  localStorage.setItem('songbuddy_screenoff', state.screenOffPlayback ? 'true' : 'false');
+  updateScreenOffUI();
+  if (state.screenOffPlayback) {
+    if (state.isPlaying) enableBackgroundAudioSession();
+    showToastNotification('Screen-Off Playback: ON 🌙 (Music continues when phone is locked)');
+  } else {
+    stopBackgroundAudioSession();
+    showToastNotification('Screen-Off Playback: OFF (Music pauses on lock)');
+  }
+}
+
+function updateScreenOffUI() {
+  const btn = $('btn-screenoff-mode');
+  const label = $('label-screenoff-status');
+  if (btn) {
+    btn.classList.toggle('active-mode', state.screenOffPlayback);
+    btn.title = `Screen-Off Playback: ${state.screenOffPlayback ? 'ON 🌙 (Plays while display is off)' : 'OFF'}`;
+  }
+  if (label) {
+    label.textContent = `Screen-Off Audio: ${state.screenOffPlayback ? 'ON 🌙' : 'OFF'}`;
+  }
+}
+
 function setupMediaSession() {
   if ('mediaSession' in navigator) {
     navigator.mediaSession.setActionHandler('play', () => togglePlayPause());
     navigator.mediaSession.setActionHandler('pause', () => togglePlayPause());
     navigator.mediaSession.setActionHandler('previoustrack', () => playPrevTrack());
-    navigator.mediaSession.setActionHandler('nexttrack', () => playNextTrack());
+    navigator.mediaSession.setActionHandler('nexttrack', () => playNextTrack(true));
+    try {
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          seekPlayerTo(details.seekTime);
+        }
+      });
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        const skip = details.seekOffset || 10;
+        const cur = isYTActive && ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : (audio?.currentTime || 0);
+        seekPlayerTo(Math.max(0, cur - skip));
+      });
+      navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        const skip = details.seekOffset || 10;
+        const cur = isYTActive && ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : (audio?.currentTime || 0);
+        seekPlayerTo(cur + skip);
+      });
+      navigator.mediaSession.setActionHandler('stop', () => {
+        togglePlayPause();
+      });
+    } catch (e) {}
   }
 }
 
 function updateMediaSession(track) {
-  if ('mediaSession' in navigator && track) {
+  if (!('mediaSession' in navigator) || !track) return;
+  const thumb = track.thumbnail || '/assets/artists/travis_scott.jpg';
+  try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: track.title,
-      artist: track.artist,
-      album: track.album || 'SongBuddy',
-      artwork: [{ src: track.thumbnail || '', sizes: '512x512', type: 'image/jpeg' }]
+      title: track.title || 'Unknown Title',
+      artist: track.artist || 'Unknown Artist',
+      album: track.album || 'SongBuddy Studio',
+      artwork: [
+        { src: thumb, sizes: '96x96', type: 'image/jpeg' },
+        { src: thumb, sizes: '128x128', type: 'image/jpeg' },
+        { src: thumb, sizes: '192x192', type: 'image/jpeg' },
+        { src: thumb, sizes: '256x256', type: 'image/jpeg' },
+        { src: thumb, sizes: '512x512', type: 'image/jpeg' }
+      ]
     });
+    navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
+  } catch (e) {}
+}
+
+function syncMediaSessionPosition(currentTime, duration) {
+  if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+    if (duration && !isNaN(duration) && duration > 0) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: Math.max(duration, 0.1),
+          playbackRate: 1,
+          position: Math.min(Math.max(currentTime || 0, 0), duration)
+        });
+      } catch (e) {}
+    }
   }
 }
 
@@ -2923,6 +3069,43 @@ function setupEventListeners() {
   $('dock-action-account')?.addEventListener('click', () => {
     toggleDockUserPopover(true);
     openAuthModal();
+  });
+
+  // Screen-Off Audio Playback Mode Toggles
+  $('btn-screenoff-mode')?.addEventListener('click', () => {
+    toggleScreenOffMode();
+  });
+
+  $('dock-action-screenoff')?.addEventListener('click', () => {
+    toggleDockUserPopover(true);
+    toggleScreenOffMode();
+  });
+
+  // Display-Off & Tab Visibility Monitor: Keeps audio running when display turns off
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      if (state.isPlaying && state.screenOffPlayback) {
+        enableBackgroundAudioSession();
+        if (isYTActive && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+          setTimeout(() => {
+            if (state.isPlaying) {
+              try { ytPlayer.playVideo(); } catch (e) {}
+            }
+          }, 80);
+        }
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
+      }
+    } else {
+      if (state.isPlaying) {
+        updatePlayPauseIcons(true);
+        if (isYTActive) startYTProgressTracker();
+        if (state.keepScreenAwake || state.cinemaMode) {
+          requestScreenWakeLock();
+        }
+      }
+    }
   });
 
   // 3. Queue / Automix Drawer Button

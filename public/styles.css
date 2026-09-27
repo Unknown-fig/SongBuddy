@@ -2916,6 +2916,16 @@ svg {
   box-shadow: var(--neu-shadow-sunken-sm);
 }
 
+.neu-menu-btn.active-mode {
+  color: var(--neu-accent, #52796f);
+  box-shadow: inset 2px 2px 4px rgba(150, 168, 158, 0.45), inset -2px -2px 4px rgba(255, 255, 255, 0.85);
+}
+
+.neu-menu-btn.awake-mode {
+  color: #d97706;
+  box-shadow: inset 2px 2px 4px rgba(217, 119, 6, 0.3), inset -2px -2px 4px rgba(255, 255, 255, 0.85);
+}
+
 /* 2. Sunken Circular Disc Well with Floating Polygonal Chips */
 .neu-artwork-stage {
   position: relative;
