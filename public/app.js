@@ -871,6 +871,8 @@ function closeMobileSearch() {
   updateDockActive('dock-btn-music');
 }
 
+let mobileSearchAbort = null;
+
 async function searchMobileMusic(query) {
   const statusEl = $('mobile-search-status');
   const resultsEl = $('mobile-search-results');
@@ -881,32 +883,70 @@ async function searchMobileMusic(query) {
   }
 
   if (!query || !query.trim()) {
-    renderMobileSearchResults(HERO_SLIDES, '🔥 Popular Recommendations');
+    if (mobileSearchAbort) {
+      mobileSearchAbort.abort();
+      mobileSearchAbort = null;
+    }
+    fetch('/api/trending')
+      .then(r => r.json())
+      .then(trending => {
+        if (Array.isArray(trending) && trending.length) {
+          renderMobileSearchResults(trending, '🔥 Popular Recommendations & Hits');
+        } else {
+          renderMobileSearchResults(HERO_SLIDES, '🔥 Popular Recommendations & Hits');
+        }
+      })
+      .catch(() => renderMobileSearchResults(HERO_SLIDES, '🔥 Popular Recommendations & Hits'));
     return;
   }
 
-  if (statusEl) statusEl.textContent = `Searching for "${query}"...`;
-  if (resultsEl) resultsEl.innerHTML = `<div style="text-align:center;padding:24px;color:#64748b;font-weight:600;">Searching tracks... 🎵</div>`;
+  const cleanQuery = query.trim();
+  if (statusEl) statusEl.textContent = `Searching for "${cleanQuery}"...`;
+  if (resultsEl) {
+    resultsEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:32px 16px;color:#94a3b8;font-weight:600;">
+        <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>
+        <span>Searching all tracks & artists... 🎵</span>
+      </div>`;
+  }
+
+  if (mobileSearchAbort) {
+    mobileSearchAbort.abort();
+  }
+  mobileSearchAbort = new AbortController();
 
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
-    if (!res.ok) throw new Error('Search failed');
+    const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}&limit=20`, {
+      signal: mobileSearchAbort.signal
+    });
+    if (!res.ok) throw new Error('Search failed with status ' + res.status);
     const tracks = await res.json();
-    if (tracks && tracks.length) {
-      renderMobileSearchResults(tracks, `Results for "${query}":`);
+    if (Array.isArray(tracks) && tracks.length > 0) {
+      renderMobileSearchResults(tracks, `Results for "${cleanQuery}" (${tracks.length}):`);
     } else {
-      const filtered = HERO_SLIDES.filter(t => 
-        t.title.toLowerCase().includes(query.toLowerCase()) || 
-        t.artist.toLowerCase().includes(query.toLowerCase())
-      );
-      renderMobileSearchResults(filtered.length ? filtered : HERO_SLIDES, filtered.length ? 'Matches:' : 'No exact match, check these hits:');
+      if (statusEl) statusEl.textContent = `No exact matches for "${cleanQuery}"`;
+      if (resultsEl) {
+        resultsEl.innerHTML = `
+          <div style="text-align:center;padding:24px 16px;color:#94a3b8;">
+            <p style="font-size:0.95rem;font-weight:600;margin-bottom:6px;">No tracks found for "${escapeHTML(cleanQuery)}"</p>
+            <p style="font-size:0.8rem;color:#64748b;">Try checking spelling or search by artist name.</p>
+          </div>`;
+      }
     }
   } catch (e) {
-    const filtered = HERO_SLIDES.filter(t => 
-      t.title.toLowerCase().includes(query.toLowerCase()) || 
-      t.artist.toLowerCase().includes(query.toLowerCase())
-    );
-    renderMobileSearchResults(filtered.length ? filtered : HERO_SLIDES, filtered.length ? 'Matches:' : 'Trending Hits:');
+    if (e.name === 'AbortError') return;
+    console.warn('Mobile search error:', e);
+    if (statusEl) statusEl.textContent = `Search error — displaying popular tracks:`;
+    fetch('/api/trending')
+      .then(r => r.json())
+      .then(trending => {
+        if (Array.isArray(trending) && trending.length) {
+          renderMobileSearchResults(trending, '🔥 Trending Hits:');
+        } else {
+          renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits:');
+        }
+      })
+      .catch(() => renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits:'));
   }
 }
 
@@ -921,13 +961,15 @@ function renderMobileSearchResults(tracks, label) {
   list.forEach(track => {
     const row = document.createElement('div');
     row.className = 'mobile-track-row';
-    const thumb = track.thumbnail || '/assets/artists/travis_scott.jpg';
+    const thumb = track.thumbnail || generateFallbackCover(track.title, track.artist);
+    const duration = track.duration_formatted || '3:30';
     row.innerHTML = `
-      <img src="${thumb}" alt="${track.title}" class="mobile-track-thumb" onerror="this.onerror=null;this.src='/assets/artists/travis_scott.jpg';">
+      <img src="${thumb}" alt="${escapeHTML(track.title)}" class="mobile-track-thumb" onerror="if(this.src.includes('hq720.jpg')){this.src=this.src.replace('hq720.jpg','hqdefault.jpg');}else{this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');}">
       <div class="mobile-track-info">
-        <div class="mobile-track-title">${track.title}</div>
-        <div class="mobile-track-artist">${track.artist || 'Artist'}</div>
+        <div class="mobile-track-title">${escapeHTML(track.title)}</div>
+        <div class="mobile-track-artist">${escapeHTML(track.artist || 'Artist')}</div>
       </div>
+      <span style="font-size:0.75rem;color:#64748b;margin-right:6px;font-variant-numeric:tabular-nums;">${duration}</span>
       <button class="mobile-track-play-btn" title="Play">
         <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
           <polygon points="8 5 19 12 8 19 8 5"></polygon>
@@ -1740,8 +1782,8 @@ function updateLyricsSync(currentTime) {
 }
 
 // ============================================================================
-// Search Engine
-// ============================================================================
+let desktopSearchAbort = null;
+
 function handleSearch(query, immediate = false) {
   if (!query || !query.trim()) {
     switchView('home');
@@ -1750,24 +1792,41 @@ function handleSearch(query, immediate = false) {
 
   const cleanQuery = query.trim();
   switchView('search');
+
+  // Always reset search filter to 'all' so results are never collapsed to 1 track
+  state.activeSearchFilter = 'all';
+  document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.classList.toggle('active', pill.dataset.filter === 'all');
+  });
+
   const loading = $('search-loading');
   const resultsList = $('search-results-list');
+  const titleEl = $('search-view-title');
+  if (titleEl) titleEl.textContent = `Search Results: "${cleanQuery}"`;
 
   if (loading) loading.classList.remove('hidden');
 
   clearTimeout(state.searchDebounceTimer);
 
   const performSearch = async () => {
+    if (desktopSearchAbort) {
+      desktopSearchAbort.abort();
+    }
+    desktopSearchAbort = new AbortController();
+
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}&limit=20`, {
+        signal: desktopSearchAbort.signal
+      });
       if (loading) loading.classList.add('hidden');
-      if (!res.ok) throw new Error('Search failed');
+      if (!res.ok) throw new Error('Search failed with status ' + res.status);
       const tracks = await res.json();
-      state.lastSearchResults = tracks || [];
+      state.lastSearchResults = Array.isArray(tracks) ? tracks : [];
       renderSearchResults(state.lastSearchResults);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       if (loading) loading.classList.add('hidden');
-      if (resultsList) resultsList.innerHTML = `<p style="color:var(--text-muted); padding:20px;">No tracks found.</p>`;
+      if (resultsList) resultsList.innerHTML = `<p style="color:var(--text-muted); padding:20px;">No tracks found for "${escapeHTML(cleanQuery)}".</p>`;
     }
   };
 
@@ -1785,26 +1844,18 @@ function renderSearchResults(tracks) {
 
   let list = tracks || [];
   const filter = state.activeSearchFilter || 'all';
+  const currentQuery = $('search-input')?.value?.toLowerCase()?.trim() || '';
 
-  if (filter === 'artists') {
-    const seenArtists = new Set();
-    list = list.filter(t => {
-      if (!seenArtists.has(t.artist)) {
-        seenArtists.add(t.artist);
-        return true;
-      }
-      return false;
-    });
-  } else if (filter === 'albums') {
-    const seenAlbums = new Set();
-    list = list.filter(t => {
-      const alb = t.album || 'Single';
-      if (!seenAlbums.has(alb)) {
-        seenAlbums.add(alb);
-        return true;
-      }
-      return false;
-    });
+  if (filter === 'artists' && currentQuery) {
+    const artistMatches = list.filter(t => (t.artist || '').toLowerCase().includes(currentQuery));
+    if (artistMatches.length > 0) {
+      list = artistMatches;
+    }
+  } else if (filter === 'albums' && currentQuery) {
+    const albumMatches = list.filter(t => (t.album || '').toLowerCase().includes(currentQuery) || (t.title || '').toLowerCase().includes(currentQuery));
+    if (albumMatches.length > 0) {
+      list = albumMatches;
+    }
   }
 
   if (!list.length) {

@@ -4,16 +4,16 @@
  * Provides offline application shell, asset caching, and network resilience.
  */
 
-const CACHE_NAME = 'songbuddy-app-v4';
+const CACHE_NAME = 'songbuddy-app-v5';
 
 // Core static assets to precache on install
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
-  '/styles.css?v=25',
+  '/styles.css?v=26',
   '/app.js',
-  '/app.js?v=36',
+  '/app.js?v=37',
   '/manifest.json',
   '/assets/icons/icon-192.png',
   '/assets/icons/icon-512.png',

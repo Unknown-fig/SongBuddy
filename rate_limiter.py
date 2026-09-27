@@ -25,12 +25,12 @@ class AdvancedRateLimiter:
 
         # Endpoint-specific limits (requests per window in seconds)
         self.LIMITS: Dict[str, Dict[str, int]] = {
-            "api_auth": {"requests": 60, "window": 60, "burst": 15},
-            "api_search": {"requests": 25, "window": 60, "burst": 5},
-            "api_stream": {"requests": 120, "window": 60, "burst": 20},
-            "api_radio": {"requests": 30, "window": 60, "burst": 5},
-            "api_lyrics": {"requests": 40, "window": 60, "burst": 10},
-            "default": {"requests": 80, "window": 60, "burst": 15}
+            "api_auth": {"requests": 60, "window": 60, "burst": 20},
+            "api_search": {"requests": 150, "window": 60, "burst": 35},
+            "api_stream": {"requests": 150, "window": 60, "burst": 25},
+            "api_radio": {"requests": 60, "window": 60, "burst": 15},
+            "api_lyrics": {"requests": 60, "window": 60, "burst": 15},
+            "default": {"requests": 120, "window": 60, "burst": 25}
         }
 
         self.VIOLATION_THRESHOLD = 8   # Ban after 8 violations
