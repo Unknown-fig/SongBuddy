@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <defs>
+    <linearGradient id="pbBg" x1="0" y1="0" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="300" fill="url(#pbBg)"/>
+
+  <!-- Swag artist silhouette -->
+  <circle cx="150" cy="100" r="50" fill="#fdba74"/>
+  <!-- Turban/Beanie & Sunglasses -->
+  <path d="M100 95 C100 50, 200 50, 200 95 C190 70, 110 70, 100 95 Z" fill="#0284c7"/>
+  <rect x="120" y="95" width="25" height="12" rx="3" fill="#0f172a"/>
+  <rect x="155" y="95" width="25" height="12" rx="3" fill="#0f172a"/>
+  <!-- Beard -->
+  <path d="M120 120 C130 150, 170 150, 180 120 Z" fill="#18181b"/>
+  <!-- Denim Jacket -->
+  <path d="M70 230 L110 160 L190 160 L230 230 Z" fill="#0369a1"/>
+
+  <!-- Neon Green Badge -->
+  <g transform="translate(18, 225)">
+    <rect x="0" y="0" width="220" height="48" rx="6" fill="#10b981"/>
+    <text x="14" y="24" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="800" fill="#000" letter-spacing="1">TRENDING NOW</text>
+    <text x="14" y="42" font-family="Impact, Arial Black, sans-serif" font-size="20" fill="#000" letter-spacing="1">PUNJABI</text>
+  </g>
+</svg>

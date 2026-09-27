@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="100%">
+      <stop offset="0%" stop-color="#0f766e"/><stop offset="100%" stop-color="#134e48"/>
+    </linearGradient>
+    <linearGradient id="overlay" x1="0" y1="0" x2="0" y2="100%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.1"/>
+      <stop offset="60%" stop-color="#000" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.85"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="300" fill="url(#bg)"/>
+  
+  <g opacity="0.95">
+    <!-- Teal stage backlight -->
+    <circle cx="150" cy="110" r="100" fill="#14b8a6" opacity="0.3"/>
+    <!-- Head & Sunglasses -->
+    <path d="M125 70 C125 50, 175 50, 175 70 C175 88, 170 105, 150 115 C130 105, 125 88, 125 70 Z" fill="#f87171"/>
+    <!-- Hair -->
+    <path d="M120 65 C122 42, 178 42, 180 65 C175 52, 125 52, 120 65 Z" fill="#18181b"/>
+    <!-- Sunglasses -->
+    <rect x="132" y="72" width="16" height="9" rx="2" fill="#09090b"/>
+    <rect x="152" y="72" width="16" height="9" rx="2" fill="#09090b"/>
+    <line x1="148" y1="76" x2="152" y2="76" stroke="#09090b" stroke-width="2"/>
+    <!-- Red Jacket and White Shirt -->
+    <path d="M90 220 L120 135 L140 145 L150 170 L160 145 L180 135 L210 220 Z" fill="#ef4444"/>
+    <path d="M140 145 L150 170 L160 145 L150 120 Z" fill="#ffffff"/>
+  </g>
+  
+  <rect width="300" height="300" fill="url(#overlay)"/>
+  
+  <g transform="translate(18, 16) scale(0.65)">
+    <circle cx="15" cy="15" r="15" fill="#1DB954"/>
+    <path d="M21.8 11.2c-4.2-2.5-11.1-2.7-15.1-1.5-.6.2-1.3-.1-1.5-.8-.2-.6.1-1.3.8-1.5 4.6-1.4 12.3-1.1 17.1 1.7.6.3.8 1.1.4 1.7-.2.5-1 .7-1.7.4zm-.2 3.8c-.3.5-.9.7-1.4.3-3.5-2.1-8.8-2.8-12.9-1.5-.5.2-1.1-.1-1.3-.7-.2-.5.1-1.1.7-1.3 4.7-1.4 10.6-.7 14.6 1.8.5.3.7.9.3 1.4zm-1.6 3.8c-.3.4-.8.5-1.2.2-3.1-1.9-6.9-2.3-11.4-1.3-.4.1-.9-.2-1-.6-.1-.4.2-.9.6-1 5-1.1 9.3-.7 12.8 1.5.4.2.5.8.2 1.2z" fill="#000"/>
+  </g>
+
+
+  <!-- Split Banner at Bottom -->
+  <g transform="translate(18, 230)">
+    <!-- Left badge: Daily Mix -->
+    <rect x="0" y="0" width="180" height="48" rx="4" fill="#0d9488"/>
+    <text x="14" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="24" font-weight="900" fill="#ffffff" letter-spacing="-0.5">Daily Mix</text>
+    
+    <!-- Right badge: Number -->
+    <rect x="186" y="0" width="78" height="48" rx="4" fill="#2dd4bf"/>
+    <text x="225" y="34" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="900" fill="#000000" text-anchor="middle">01</text>
+  </g>
+</svg>
