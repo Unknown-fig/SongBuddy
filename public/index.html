@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=27">
+  <link rel="stylesheet" href="styles.css?v=28">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2352796f'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -658,7 +658,7 @@
         </button>
 
         <!-- Previous (Concentric Circle) -->
-        <button class="neu-ctrl-btn neu-btn-prev" id="btn-ctrl-prev" title="Previous Track">
+        <button class="neu-ctrl-btn neu-btn-prev" id="btn-ctrl-prev" title="Previous Track (Ctrl + B)" aria-keyshortcuts="Control+B">
           <div class="neu-ctrl-inner">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <polygon points="19 20 9 12 19 4 19 20"></polygon>
@@ -668,7 +668,7 @@
         </button>
 
         <!-- Play/Pause (Center Double Concentric Disc) -->
-        <button class="neu-ctrl-btn neu-btn-play" id="btn-ctrl-play" title="Play / Pause (Space)">
+        <button class="neu-ctrl-btn neu-btn-play" id="btn-ctrl-play" title="Play / Pause (P or Space)" aria-keyshortcuts="P Space">
           <div class="neu-play-rim">
             <div class="neu-play-center">
               <svg id="play-svg" viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
@@ -683,7 +683,7 @@
         </button>
 
         <!-- Next (Concentric Circle) -->
-        <button class="neu-ctrl-btn neu-btn-next" id="btn-ctrl-next" title="Next Track">
+        <button class="neu-ctrl-btn neu-btn-next" id="btn-ctrl-next" title="Next Track (Ctrl + N)" aria-keyshortcuts="Control+N">
           <div class="neu-ctrl-inner">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <polygon points="5 4 15 12 5 20 5 4"></polygon>
@@ -903,13 +903,13 @@
             <line x1="15" y1="15" x2="21" y2="21"></line>
           </svg>
         </button>
-        <button class="cinema-ctrl-btn" id="cinema-btn-prev" title="Previous Track">
+        <button class="cinema-ctrl-btn" id="cinema-btn-prev" title="Previous Track (Ctrl + B)" aria-keyshortcuts="Control+B">
           <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
             <polygon points="19 20 9 12 19 4 19 20"></polygon>
             <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5"></line>
           </svg>
         </button>
-        <button class="cinema-ctrl-play" id="cinema-btn-play" title="Play or Pause Track">
+        <button class="cinema-ctrl-play" id="cinema-btn-play" title="Play / Pause (P or Space)" aria-keyshortcuts="P Space">
           <svg id="cinema-play-svg" viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
             <polygon points="8 5 19 12 8 19 8 5"></polygon>
           </svg>
@@ -918,7 +918,7 @@
             <rect x="13.5" y="5" width="3.5" height="14" rx="1"></rect>
           </svg>
         </button>
-        <button class="cinema-ctrl-btn" id="cinema-btn-next" title="Next Track">
+        <button class="cinema-ctrl-btn" id="cinema-btn-next" title="Next Track (Ctrl + N)" aria-keyshortcuts="Control+N">
           <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
             <polygon points="5 4 15 12 5 20 5 4"></polygon>
             <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5"></line>
@@ -1293,6 +1293,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=38"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>
