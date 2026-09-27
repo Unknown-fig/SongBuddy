@@ -2350,19 +2350,28 @@ function shiftAmbientAura(seed) {
   }
 }
 
-// Cinema Ambilight Mode Controller
-function openCinemaAmbilight() {
+// TV Mode / Cinema Ambilight Controller (Activated by 'F' button or key)
+function openCinemaAmbilight(options = {}) {
   const modal = $('cinema-ambilight-modal');
   if (!modal) return;
   modal.classList.remove('hidden');
 
   if (state.currentTrack) {
     syncCinemaTrack(state.currentTrack);
-  } else if (state.featuredTracks.length > 0) {
+  } else if (state.featuredTracks && state.featuredTracks.length > 0) {
     playTrack(state.featuredTracks[0]);
     syncCinemaTrack(state.featuredTracks[0]);
   } else {
     syncCinemaTrack(HERO_SLIDES[0]);
+  }
+
+  // Request browser Fullscreen for immersive TV experience
+  if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+
+  if (options.showToast !== false) {
+    showToastNotification('TV Mode Activated 📺 (Press F or Esc to exit)');
   }
 }
 
@@ -2370,6 +2379,20 @@ function closeCinemaAmbilight() {
   const modal = $('cinema-ambilight-modal');
   if (modal) {
     modal.classList.add('hidden');
+  }
+
+  // Exit browser Fullscreen if currently active
+  if (document.fullscreenElement && document.exitFullscreen) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+function toggleCinemaAmbilight() {
+  const modal = $('cinema-ambilight-modal');
+  if (modal && !modal.classList.contains('hidden')) {
+    closeCinemaAmbilight();
+  } else {
+    openCinemaAmbilight();
   }
 }
 
@@ -2787,13 +2810,9 @@ function setupEventListeners() {
     } else if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
       togglePlayPause();
-    } else if ((e.key === 'c' || e.key === 'C') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-      const modal = $('cinema-ambilight-modal');
-      if (modal && !modal.classList.contains('hidden')) {
-        closeCinemaAmbilight();
-      } else {
-        openCinemaAmbilight();
-      }
+    } else if ((e.key === 'f' || e.key === 'F' || e.key === 'c' || e.key === 'C') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      toggleCinemaAmbilight();
     } else if (e.key === 'Escape') {
       closeQueueDrawer();
       closeLyrics();
@@ -2818,12 +2837,13 @@ function setupEventListeners() {
     $('btn-ctrl-repeat')?.classList.toggle('active', state.isRepeat);
   });
 
-  // Cinema Ambilight Mode Listeners (TV screen ambient roaming light experience)
-  $('btn-cinema-mode')?.addEventListener('click', openCinemaAmbilight);
-  $('btn-cinema-top')?.addEventListener('click', openCinemaAmbilight);
+  // TV Mode / Cinema Ambilight Mode Listeners (TV screen ambient roaming light experience)
+  $('btn-cinema-mode')?.addEventListener('click', toggleCinemaAmbilight);
+  $('btn-cinema-top')?.addEventListener('click', toggleCinemaAmbilight);
+  $('cinema-tv-pill')?.addEventListener('click', closeCinemaAmbilight);
   $('dock-action-cinema')?.addEventListener('click', () => {
     toggleDockUserPopover(true);
-    openCinemaAmbilight();
+    toggleCinemaAmbilight();
   });
   $('btn-close-cinema')?.addEventListener('click', closeCinemaAmbilight);
   $('cinema-btn-play')?.addEventListener('click', togglePlayPause);
