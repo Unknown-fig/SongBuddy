@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <rect width="300" height="300" fill="#121212"/>
+  <defs>
+    <linearGradient id="dwGrad" x1="0" y1="0" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899"/>
+      <stop offset="40%" stop-color="#a855f7"/>
+      <stop offset="70%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Left stylized block grid -->
+  <g transform="translate(25, 30)">
+    <rect x="0" y="0" width="100" height="240" fill="#000" rx="4"/>
+    <rect x="0" y="0" width="100" height="60" fill="#ec4899"/>
+    <text x="50" y="42" font-family="Impact, Arial Black, sans-serif" font-size="28" fill="#fff" text-anchor="middle">DIS</text>
+    
+    <rect x="0" y="60" width="100" height="60" fill="#eab308"/>
+    <text x="50" y="102" font-family="Impact, Arial Black, sans-serif" font-size="28" fill="#000" text-anchor="middle">COV</text>
+    
+    <rect x="0" y="120" width="100" height="60" fill="#a855f7"/>
+    <text x="50" y="162" font-family="Impact, Arial Black, sans-serif" font-size="28" fill="#fff" text-anchor="middle">ER</text>
+    
+    <rect x="0" y="180" width="100" height="60" fill="#22c55e"/>
+    <text x="50" y="222" font-family="Impact, Arial Black, sans-serif" font-size="24" fill="#000" text-anchor="middle">WKLY</text>
+  </g>
+
+  <!-- Right text info -->
+  <text x="140" y="90" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="900" fill="#ffffff" letter-spacing="-0.5">Discover</text>
+  <text x="140" y="118" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="900" fill="#ffffff" letter-spacing="-0.5">Weekly</text>
+
+  <text x="140" y="160" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="500" fill="#a1a1aa">Your weekly</text>
+  <text x="140" y="180" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="500" fill="#a1a1aa">mixtape of</text>
+  <text x="140" y="200" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="500" fill="#a1a1aa">fresh music.</text>
+
+  <rect x="140" y="230" width="120" height="30" rx="15" fill="#22c55e"/>
+  <text x="200" y="250" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="800" fill="#000" text-anchor="middle">UPDATED MON</text>
+</svg>

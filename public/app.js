@@ -329,11 +329,13 @@ function checkAuthState() {
     if ($('dropdown-user-name')) $('dropdown-user-name').textContent = user.name;
     if ($('dropdown-user-email')) $('dropdown-user-email').textContent = user.email;
     if ($('dropdown-avatar')) $('dropdown-avatar').src = user.avatar;
+    if ($('made-for-user-heading')) $('made-for-user-heading').textContent = user.name;
   } else {
     if ($('user-name')) $('user-name').textContent = 'Guest';
     if ($('user-avatar')) $('user-avatar').src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
     if ($('dropdown-user-name')) $('dropdown-user-name').textContent = 'Guest Listener';
     if ($('dropdown-user-email')) $('dropdown-user-email').textContent = 'Click to sign in';
+    if ($('made-for-user-heading')) $('made-for-user-heading').textContent = 'Speedrunner';
   }
 }
 
@@ -2730,6 +2732,154 @@ function setupEventListeners() {
       const idx = parseInt(dot.dataset.index, 10);
       updateHeroSlide(idx);
     });
+  });
+
+  // Spotify Circular Home Button
+  $('btn-top-home')?.addEventListener('click', () => {
+    switchView('home');
+  });
+
+  // Spotify Browse Button
+  $('btn-search-browse')?.addEventListener('click', () => {
+    switchView('search');
+    const input = $('search-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  });
+
+  // Spotify Explore Premium Pill Button
+  $('btn-explore-premium')?.addEventListener('click', () => {
+    showToastNotification('SongBuddy Hi-Fi VIP: Unlimited skips, 320kbps Lossless, Zero Ads ✨');
+  });
+
+  // Spotify Feed Filter Pills (All, Music, Podcasts)
+  document.querySelectorAll('.spotify-feed-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.spotify-feed-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      const filter = pill.dataset.feedFilter;
+      if (filter === 'podcasts') {
+        showToastNotification('Filtering Podcasts & Talk Shows 🎙️');
+        const input = $('search-input');
+        if (input) input.value = 'Popular Podcasts 2024';
+        handleSearch('Popular Podcasts 2024', true);
+      } else if (filter === 'music') {
+        showToastNotification('Music feed selected 🎵');
+        switchView('home');
+      } else {
+        switchView('home');
+      }
+    });
+  });
+
+  // Helper for 1-Click Instant Playback on Quick Cards & Album Cards
+  async function quickPlaySpotifyCard(query, title) {
+    showToastNotification(`Playing ${title}... 🎧`);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=5`);
+      if (!res.ok) throw new Error('Search failed');
+      const tracks = await res.json();
+      if (Array.isArray(tracks) && tracks.length > 0) {
+        playTrack(tracks[0], { startRadio: true });
+      } else {
+        const input = $('search-input');
+        if (input) input.value = query;
+        handleSearch(query, true);
+      }
+    } catch (e) {
+      console.warn('[QuickPlay Error]:', e);
+      const input = $('search-input');
+      if (input) input.value = query;
+      handleSearch(query, true);
+    }
+  }
+
+  // Spotify 2x4 Quick Play Cards
+  document.querySelectorAll('.spotify-quick-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const query = card.dataset.query || card.querySelector('.quick-card-title')?.textContent;
+      const title = card.dataset.title || card.querySelector('.quick-card-title')?.textContent || 'Playlist';
+      if (query) quickPlaySpotifyCard(query, title);
+    });
+  });
+
+  // Spotify Album Cards (Made For & Recents)
+  document.querySelectorAll('.spotify-album-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const query = card.dataset.query || card.querySelector('.spotify-album-desc')?.textContent;
+      const title = card.dataset.title || card.querySelector('.spotify-album-desc')?.textContent || 'Mix';
+      if (query) quickPlaySpotifyCard(query, title);
+    });
+  });
+
+  // Getting Started Card Tip Carousel & Video Actions
+  const GETTING_STARTED_TIPS = [
+    {
+      title: '1. Lossless Studio Audio',
+      desc: 'Experience pure 320kbps audio clarity with dynamic range compression and auto-gain.',
+      cta: 'Explore Audio'
+    },
+    {
+      title: '2. Screen-Off Playback',
+      desc: 'Lock your phone or turn display off while your favorite music continues playing smoothly.',
+      cta: 'Learn Screen-Off'
+    },
+    {
+      title: '3. Watch a video',
+      desc: 'Play videos from your favorite artists and creators.',
+      cta: 'Browse videos'
+    },
+    {
+      title: '4. TV Mode Ambilight',
+      desc: 'Press "F" key or tap TV Mode button for synced fullscreen ambient atmospheric visuals.',
+      cta: 'Enter TV Mode'
+    }
+  ];
+  let currentTipIndex = 2; // Default to tip 3 ("3. Watch a video")
+
+  function updateGettingStartedTip(idx) {
+    currentTipIndex = (idx + GETTING_STARTED_TIPS.length) % GETTING_STARTED_TIPS.length;
+    const tip = GETTING_STARTED_TIPS[currentTipIndex];
+    if ($('getting-started-title')) $('getting-started-title').textContent = tip.title;
+    if ($('getting-started-desc')) $('getting-started-desc').textContent = tip.desc;
+    if ($('btn-browse-videos')) $('btn-browse-videos').textContent = tip.cta;
+  }
+
+  $('btn-getting-started-prev')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    updateGettingStartedTip(currentTipIndex - 1);
+  });
+  $('btn-getting-started-next')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    updateGettingStartedTip(currentTipIndex + 1);
+  });
+
+  $('btn-browse-videos')?.addEventListener('click', () => {
+    if (currentTipIndex === 2 || currentTipIndex === 3) {
+      toggleCinemaAmbilight();
+    } else {
+      showToastNotification(GETTING_STARTED_TIPS[currentTipIndex].desc);
+    }
+  });
+
+  $('getting-started-disc')?.addEventListener('click', () => {
+    toggleCinemaAmbilight();
+  });
+
+  $('btn-show-tips')?.addEventListener('click', () => {
+    updateGettingStartedTip(currentTipIndex + 1);
+  });
+
+  $('btn-show-all-made-for')?.addEventListener('click', () => {
+    const input = $('search-input');
+    if (input) input.value = 'Daily Mix India trending hits';
+    handleSearch('Daily Mix India trending hits', true);
+  });
+
+  $('btn-show-all-recents')?.addEventListener('click', () => {
+    switchView('library', 'recent');
   });
 
   // Genre Cards

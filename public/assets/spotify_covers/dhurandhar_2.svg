@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <defs>
+    <radialGradient id="fireGrad" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#ffedd5"/>
+      <stop offset="25%" stop-color="#f97316"/>
+      <stop offset="60%" stop-color="#b91c1c"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="300" fill="url(#fireGrad)"/>
+
+  <!-- Sparks and Embers -->
+  <circle cx="80" cy="110" r="3" fill="#fef08a"/>
+  <circle cx="210" cy="80" r="2.5" fill="#fed7aa"/>
+  <circle cx="160" cy="50" r="4" fill="#fef08a"/>
+  <circle cx="240" cy="160" r="2" fill="#fef08a"/>
+
+  <!-- Dramatic Typography -->
+  <text x="150" y="110" font-family="Impact, Arial Black, sans-serif" font-size="18" fill="#fde047" text-anchor="middle" letter-spacing="6">REVENGE</text>
+  <text x="150" y="160" font-family="Impact, Arial Black, sans-serif" font-size="34" fill="#ffffff" text-anchor="middle" letter-spacing="2">DHURANDHAR</text>
+  <text x="150" y="210" font-family="Impact, Arial Black, sans-serif" font-size="48" fill="#f97316" text-anchor="middle" letter-spacing="1">CHAPTER 2</text>
+  <rect x="75" y="230" width="150" height="26" rx="4" fill="#000000" opacity="0.75"/>
+  <text x="150" y="248" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="2">ALL SONGS OST</text>
+</svg>
