@@ -88,7 +88,10 @@ PUBLIC_DIR = BASE_DIR / "public"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 YOUTUBE_ID_REGEX = re.compile(r"^[A-Za-z0-9_-]{11}$")
 TITLE_CLEANUP_REGEX = re.compile(
-    r"(?i)\s*[\(\[](?:official\s*(?:video|audio|music\s*video|lyric\s*video|visualizer)?|lyrics?|4k|hd|remastered|audio|hq)[\)\]]|\s*\|\s*.*$"
+    r"(?i)\s*[\(\[](?:official\s*(?:video|audio|music\s*video|lyric\s*video|visualizer|mv|performance)?|lyrics?|4k|8k|hd|remastered|audio|hq|full\s*song|video|lyric|special\s*version)[\)\]]"
+)
+CHANNEL_CLEANUP_REGEX = re.compile(
+    r"(?i)\s*(?:VEVO|Official|Topic|Channel|Music|Records|Entertainment)$"
 )
 
 # Concurrency & Locks
@@ -278,15 +281,106 @@ def format_duration(seconds: Optional[Union[int, float]]) -> str:
     except (ValueError, TypeError):
         return "0:00"
 
-def clean_track_title(raw_title: str, default_artist: str) -> Tuple[str, str]:
-    """Robust title and artist cleaner stripping noisy video annotations."""
-    cleaned = TITLE_CLEANUP_REGEX.sub("", raw_title).strip()
-    if " - " in cleaned:
-        parts = cleaned.split(" - ", 1)
-        artist = parts[0].strip()
-        title = parts[1].strip()
-        return (title or raw_title, artist or default_artist)
-    return (cleaned or raw_title, default_artist)
+def clean_track_title(raw_title: str, default_artist: str, query: str = "") -> Tuple[str, str]:
+    """
+    Intelligently extracts the true Song Title and Artist from noisy YouTube video titles.
+    Preserves exact song names instead of swapping them with movie names or descriptors.
+    """
+    if not raw_title:
+        return ("Unknown Track", default_artist or "Unknown Artist")
+
+    raw = raw_title.strip()
+
+    # 1. Clean bracketed boilerplates: [Official Video], (Audio), (Lyrics), [4K], etc.
+    cleaned = TITLE_CLEANUP_REGEX.sub("", raw).strip()
+    cleaned = re.sub(r"^[\"\'“‘]+|[\"\'”’]+$", "", cleaned).strip()
+    # Normalize unicode dashes (en-dash, em-dash) to standard " - "
+    cleaned = re.sub(r"\s*[–—]\s*", " - ", cleaned)
+
+    # 2. Check for pipe delimiter: e.g. "Kesariya - Brahmāstra | Ranbir Kapoor... | Pritam | Arijit Singh"
+    pipe_parts = [p.strip() for p in cleaned.split("|") if p.strip()]
+    first_segment = pipe_parts[0] if pipe_parts else cleaned
+    other_segments = pipe_parts[1:] if len(pipe_parts) > 1 else []
+
+    # Clean channel / default artist
+    clean_chan = CHANNEL_CLEANUP_REGEX.sub("", default_artist).strip() if default_artist else "Unknown Artist"
+    is_label_channel = any(lbl in (default_artist or "").lower() for lbl in [
+        "music", "records", "series", "vevo", "label", "entertainment", 
+        "films", "company", "official", "bollywood", "studio", "tips", "zee"
+    ])
+
+    title = first_segment
+    artist = clean_chan or default_artist or "Unknown Artist"
+
+    # 3. Check for dash delimiter " - " in the first segment
+    if " - " in first_segment:
+        parts = [x.strip() for x in first_segment.split(" - ", 1)]
+        p0 = TITLE_CLEANUP_REGEX.sub("", parts[0]).strip()
+        p1 = TITLE_CLEANUP_REGEX.sub("", parts[1]).strip()
+
+        p0_lower = p0.lower()
+        p1_lower = p1.lower()
+        chan_lower = clean_chan.lower()
+        q_lower = query.lower().strip() if query else ""
+
+        # Case A: Channel matches p0 -> p0 is Artist, p1 is Title
+        if chan_lower and len(chan_lower) > 2 and (chan_lower in p0_lower or p0_lower in chan_lower):
+            artist = p0
+            title = p1
+        # Case B: Channel matches p1 -> p1 is Artist, p0 is Title
+        elif chan_lower and len(chan_lower) > 2 and (chan_lower in p1_lower or p1_lower in chan_lower):
+            artist = p1
+            title = p0
+        # Case C: Query specifically matches p0 (e.g. query "kesariya", p0 is "Kesariya", p1 is "Brahmāstra")
+        elif q_lower and q_lower in p0_lower and q_lower not in p1_lower:
+            title = p0
+            found_artist = None
+            for seg in other_segments:
+                seg_clean = TITLE_CLEANUP_REGEX.sub("", seg).strip()
+                if any(w in seg.lower() for w in ["singh", "sharma", "pritam", "sheeran", "kapoor", "feat", "ft.", "ft "]):
+                    found_artist = seg_clean
+                    break
+            if not found_artist and other_segments:
+                found_artist = TITLE_CLEANUP_REGEX.sub("", other_segments[-1]).strip()
+            artist = found_artist or (clean_chan if not is_label_channel else p1)
+        # Case D: Query specifically matches p1 (e.g. query "starboy", p0 is "The Weeknd", p1 is "Starboy")
+        elif q_lower and q_lower in p1_lower and q_lower not in p0_lower:
+            title = p1
+            artist = p0
+        # Case E: p1 indicates a version or subtitle (e.g., "Kesariya - Film Version", "Numb - Live in Texas")
+        elif any(sub in p1_lower for sub in ["film version", "remix", "acoustic", "live", "slowed", "reverb", "version", "mix", "cover"]):
+            title = f"{p0} ({p1})" if any(x in p1_lower for x in ["version", "mix", "remix"]) else p0
+            if other_segments:
+                for seg in other_segments:
+                    seg_clean = TITLE_CLEANUP_REGEX.sub("", seg).strip()
+                    if not any(k in seg.lower() for k in ["4k", "8k", "video", "official", "full song"]):
+                        artist = seg_clean
+                        break
+            if is_label_channel and not other_segments:
+                artist = clean_chan
+        else:
+            # Default convention: Artist - Title
+            artist = p0
+            title = p1
+    else:
+        # No " - " in first segment: e.g. "Believer" or "Kesariya | Brahmāstra | Arijit Singh"
+        title = first_segment
+        if other_segments:
+            for seg in other_segments:
+                seg_clean = TITLE_CLEANUP_REGEX.sub("", seg).strip()
+                if not any(k in seg.lower() for k in ["4k", "8k", "video", "official", "lyrics", "full song", "remastered"]):
+                    artist = seg_clean
+                    break
+
+    # Clean double spaces, quotes, and punctuation
+    title = re.sub(r"\s{2,}", " ", title).strip(" -|:,\"'")
+    artist = re.sub(r"\s{2,}", " ", artist).strip(" -|:,\"'")
+    artist = CHANNEL_CLEANUP_REGEX.sub("", artist).strip()
+
+    # Deduplicate repeated featuring credits (e.g. "ft. Daft Punk ft. Daft Punk")
+    title = re.sub(r"(?i)\b(ft\.?|feat\.?)\s+([A-Za-z0-9\s&,]+?)\s+\1\s+\2\b", r"\1 \2", title).strip()
+
+    return (title or raw_title, artist or default_artist or "Unknown Artist")
 
 def has_valid_netscape_cookies(path_or_content: Optional[Union[Path, str]]) -> bool:
     """Ensures a cookie file or string has actual tab-separated cookie entries, not just comments."""
@@ -462,7 +556,7 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
         vlock.release()
 
 def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
-    """Searches YouTube using fast flat extraction with (query, limit) cache key."""
+    """Searches YouTube using fast flat extraction with intelligent title cleaning and candidate ranking."""
     q_clean = query.strip()
     if not q_clean:
         return []
@@ -481,31 +575,47 @@ def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
         }
 
         tracks = []
+        fetch_count = min(limit + 8, 25)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            res = ydl.extract_info(f"ytsearch{limit}:{q_clean}", download=False)
+            res = ydl.extract_info(f"ytsearch{fetch_count}:{q_clean}", download=False)
             entries = res.get("entries", [])
             for entry in entries:
                 vid_id = entry.get("id")
                 if not vid_id:
                     continue
 
+                duration = entry.get("duration")
+                # Filter out teaser clips under 35 seconds (unless requested in query)
+                if duration and duration < 35 and "teaser" not in q_clean.lower() and "short" not in q_clean.lower():
+                    continue
+
                 thumbnails = entry.get("thumbnails") or []
                 thumb = thumbnails[-1]["url"] if thumbnails else f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
-                duration = entry.get("duration")
+                if "hq720.jpg" in thumb:
+                    thumb = thumb.replace("hq720.jpg", "hqdefault.jpg")
 
                 raw_title = entry.get("title", "Unknown Track")
                 raw_artist = entry.get("channel") or entry.get("uploader") or "Unknown Artist"
-                cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_artist)
+                cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_artist, query=q_clean)
+
+                # Attempt to extract album / soundtrack if indicated
+                album = entry.get("album")
+                if not album:
+                    album_match = re.search(r'(?i)\b(?:from|soundtrack|film)\s+["\']?([^"\'|()]+)["\']?', raw_title)
+                    album = album_match.group(1).strip() if album_match else "Single"
 
                 tracks.append({
                     "id": vid_id,
                     "title": cleaned_title,
                     "artist": cleaned_artist,
-                    "album": entry.get("album") or "Single",
+                    "album": album or "Single",
                     "duration": duration,
                     "duration_formatted": format_duration(duration),
                     "thumbnail": thumb
                 })
+
+                if len(tracks) >= limit:
+                    break
 
         SEARCH_CACHE.set(cache_key, tracks)
         return tracks
