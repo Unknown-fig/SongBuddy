@@ -795,6 +795,7 @@ function updateQueueBadge() {
 function openQueueDrawer() {
   const overlay = $('queue-drawer-overlay');
   if (!overlay) return;
+  $('pwa-install-toast')?.classList.add('hidden');
   overlay.classList.remove('hidden');
   updateDockActive('dock-btn-queue');
   renderQueueDrawer();
@@ -805,11 +806,115 @@ function closeQueueDrawer() {
   if (overlay) {
     overlay.classList.add('hidden');
   }
-  if (state.activeView === 'home') {
+  if (state.activeView === 'home' && window.innerWidth > 768) {
     updateDockActive('dock-btn-home');
   } else {
     updateDockActive('dock-btn-music');
   }
+}
+
+// ============================================================================
+// Mobile Dedicated Search & Discovery Drawer
+// ============================================================================
+let mobileSearchDebounce = null;
+
+function openMobileSearch(initialQuery = '') {
+  const overlay = $('mobile-search-drawer');
+  if (!overlay) return;
+  $('pwa-install-toast')?.classList.add('hidden');
+  overlay.classList.remove('hidden');
+  updateDockActive('dock-btn-home');
+
+  const input = $('mobile-search-input');
+  if (input) {
+    if (initialQuery) {
+      input.value = initialQuery;
+      searchMobileMusic(initialQuery);
+    } else if (!input.value.trim()) {
+      renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits (Tap to play)');
+    }
+    setTimeout(() => input.focus(), 150);
+  }
+}
+
+function closeMobileSearch() {
+  const overlay = $('mobile-search-drawer');
+  if (overlay) {
+    overlay.classList.add('hidden');
+  }
+  updateDockActive('dock-btn-music');
+}
+
+async function searchMobileMusic(query) {
+  const statusEl = $('mobile-search-status');
+  const resultsEl = $('mobile-search-results');
+  const clearBtn = $('mobile-search-clear');
+
+  if (clearBtn) {
+    clearBtn.classList.toggle('hidden', !query || !query.trim());
+  }
+
+  if (!query || !query.trim()) {
+    renderMobileSearchResults(HERO_SLIDES, '🔥 Popular Recommendations');
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = `Searching for "${query}"...`;
+  if (resultsEl) resultsEl.innerHTML = `<div style="text-align:center;padding:24px;color:#64748b;font-weight:600;">Searching tracks... 🎵</div>`;
+
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+    if (!res.ok) throw new Error('Search failed');
+    const tracks = await res.json();
+    if (tracks && tracks.length) {
+      renderMobileSearchResults(tracks, `Results for "${query}":`);
+    } else {
+      const filtered = HERO_SLIDES.filter(t => 
+        t.title.toLowerCase().includes(query.toLowerCase()) || 
+        t.artist.toLowerCase().includes(query.toLowerCase())
+      );
+      renderMobileSearchResults(filtered.length ? filtered : HERO_SLIDES, filtered.length ? 'Matches:' : 'No exact match, check these hits:');
+    }
+  } catch (e) {
+    const filtered = HERO_SLIDES.filter(t => 
+      t.title.toLowerCase().includes(query.toLowerCase()) || 
+      t.artist.toLowerCase().includes(query.toLowerCase())
+    );
+    renderMobileSearchResults(filtered.length ? filtered : HERO_SLIDES, filtered.length ? 'Matches:' : 'Trending Hits:');
+  }
+}
+
+function renderMobileSearchResults(tracks, label) {
+  const statusEl = $('mobile-search-status');
+  const resultsEl = $('mobile-search-results');
+  if (statusEl && label) statusEl.textContent = label;
+  if (!resultsEl) return;
+  resultsEl.innerHTML = '';
+
+  const list = (tracks && tracks.length) ? tracks : HERO_SLIDES;
+  list.forEach(track => {
+    const row = document.createElement('div');
+    row.className = 'mobile-track-row';
+    const thumb = track.thumbnail || '/assets/artists/travis_scott.jpg';
+    row.innerHTML = `
+      <img src="${thumb}" alt="${track.title}" class="mobile-track-thumb" onerror="this.onerror=null;this.src='/assets/artists/travis_scott.jpg';">
+      <div class="mobile-track-info">
+        <div class="mobile-track-title">${track.title}</div>
+        <div class="mobile-track-artist">${track.artist || 'Artist'}</div>
+      </div>
+      <button class="mobile-track-play-btn" title="Play">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+          <polygon points="8 5 19 12 8 19 8 5"></polygon>
+        </svg>
+      </button>
+    `;
+    row.addEventListener('click', () => {
+      playTrack(track);
+      closeMobileSearch();
+      showToastNotification(`Playing: ${track.title} 🎵`);
+    });
+    resultsEl.appendChild(row);
+  });
 }
 
 function playRadioTrack(index) {
@@ -2729,7 +2834,8 @@ function setupEventListeners() {
     updateDockActive('dock-btn-music');
     if (state.lyrics.isOpen) {
       closeLyrics();
-    } else {
+      closeMobileSearch();
+      closeQueueDrawer();
       if (!state.currentTrack) {
         playTrack(HERO_SLIDES[0]);
       }
@@ -2744,12 +2850,56 @@ function setupEventListeners() {
     if (state.lyrics.isOpen) {
       closeLyrics();
     }
+    closeQueueDrawer();
+    // On mobile devices, open the smooth instant search & discover drawer
+    if (window.innerWidth <= 768) {
+      openMobileSearch();
+      return;
+    }
     switchView('home');
     updateDockActive('dock-btn-home');
     const feed = $('main-feed');
     if (feed) feed.scrollTo({ top: 0, behavior: 'smooth' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showToastNotification('Exploring Home Feed 🏠');
+  });
+
+  // Mobile Header Search Button
+  $('btn-neu-search-mobile')?.addEventListener('click', () => {
+    toggleDockUserPopover(true);
+    openMobileSearch();
+  });
+
+  // Mobile Search Drawer Event Listeners
+  $('btn-close-mobile-search')?.addEventListener('click', closeMobileSearch);
+  $('mobile-search-backdrop')?.addEventListener('click', closeMobileSearch);
+  $('mobile-search-clear')?.addEventListener('click', () => {
+    const input = $('mobile-search-input');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    $('mobile-search-clear')?.classList.add('hidden');
+    renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits (Tap to play)');
+  });
+
+  $('mobile-search-input')?.addEventListener('input', (e) => {
+    clearTimeout(mobileSearchDebounce);
+    const q = e.target.value;
+    mobileSearchDebounce = setTimeout(() => {
+      searchMobileMusic(q);
+    }, 280);
+  });
+
+  document.querySelectorAll('.mobile-tag').forEach(tag => {
+    tag.addEventListener('click', () => {
+      document.querySelectorAll('.mobile-tag').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      const q = tag.dataset.query || tag.textContent.replace(/[^\w\s-]/g, '').trim();
+      const input = $('mobile-search-input');
+      if (input) input.value = (q === 'Trending') ? '' : q;
+      searchMobileMusic((q === 'Trending') ? '' : q);
+    });
   });
 
   // 3. User / Account Settings Button
@@ -2964,6 +3114,9 @@ function initPWA() {
         setTimeout(() => {
           if (deferredPWAInstallPrompt && !window.matchMedia('(display-mode: standalone)').matches) {
             $('pwa-install-toast')?.classList.remove('hidden');
+            setTimeout(() => {
+              $('pwa-install-toast')?.classList.add('hidden');
+            }, 5500);
           }
         }, 3500);
       }
