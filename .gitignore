@@ -28,3 +28,15 @@ htmlcov/
 *.log
 
 .vercel
+
+# IDE & Editors
+.idea/
+*.iml
+.vscode/
+
+# Android build artifacts
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
