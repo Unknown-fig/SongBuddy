@@ -372,8 +372,8 @@ function createRecentCover(title, artist, color1, color2, iconType) {
 const rc1 = createRecentCover('Coke Studio 15', 'Season 15 Fusion', '#e11d48', '#881337', 'vinyl');
 const rc2 = createRecentCover('Global Top 50', 'Daily Chart Hits', '#10b981', '#064e3b', 'chart');
 const rc3 = createRecentCover('Lo-Fi Cafe', 'Rainy Chill Beats', '#f59e0b', '#78350f', 'coffee');
-const rc4 = createRecentCover('Bollywood Retro', 'Kishore & RD Burman', '#8b5cf6', '#4c1d95', 'retro');
-const rc5 = createRecentCover('Punjabi Wave', 'AP Dhillon & Diljit', '#06b6d4', '#164e63', 'wave');
+const rc4 = createRecentCover('Bollywood Retro', 'Kishore &amp; RD Burman', '#8b5cf6', '#4c1d95', 'retro');
+const rc5 = createRecentCover('Punjabi Wave', 'AP Dhillon &amp; Diljit', '#06b6d4', '#164e63', 'wave');
 const rc6 = createRecentCover('Synthwave 80s', 'Neon Night Drive', '#ec4899', '#581c87', 'synth');
 
 const files = {
