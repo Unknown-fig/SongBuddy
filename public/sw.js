@@ -4,16 +4,14 @@
  * Provides offline application shell, asset caching, and network resilience.
  */
 
-const CACHE_NAME = 'songbuddy-app-v8';
+const CACHE_NAME = 'songbuddy-app-v10';
 
 // Core static assets to precache on install
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
-  '/styles.css',
-  '/styles.css?v=29',
-  '/app.js',
-  '/app.js?v=40',
+  '/styles.css?v=50',
+  '/app.js?v=50',
   '/manifest.json',
   '/assets/icons/icon-192.png',
   '/assets/icons/icon-512.png',
@@ -63,7 +61,30 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. API Data Requests: Network-First with Cache Fallback
+  // 2. Navigation / HTML Document Requests: Network-First with Cache Fallback
+  // Guarantees users always see the latest updated UI immediately when online
+  if (request.mode === 'navigate' || request.destination === 'document' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const respClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, respClone);
+            });
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          return caches.match('/index.html');
+        })
+    );
+    return;
+  }
+
+  // 3. API Data Requests: Network-First with Cache Fallback
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
@@ -88,7 +109,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. App Shell and Static Assets: Stale-While-Revalidate
+  // 4. Static Assets: Stale-While-Revalidate with Background Refresh
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)

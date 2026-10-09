@@ -4122,12 +4122,18 @@ function initPWA() {
       navigator.serviceWorker.register('/sw.js')
         .then((registration) => {
           console.log('[SongBuddy PWA] Service Worker active with scope:', registration.scope);
+          registration.update().catch(() => {});
           registration.onupdatefound = () => {
             const installingWorker = registration.installing;
             if (installingWorker) {
               installingWorker.onstatechange = () => {
                 if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  console.log('[SongBuddy PWA] New update ready; will activate on next launch.');
+                  console.log('[SongBuddy PWA] New update ready; activating immediately.');
+                  installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                  showToastNotification('SongBuddy updated! Refreshing with latest features 🚀');
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 1200);
                 }
               };
             }
@@ -4136,6 +4142,14 @@ function initPWA() {
         .catch((err) => {
           console.warn('[SongBuddy PWA] Service Worker registration failed:', err);
         });
+    });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
     });
   }
 
