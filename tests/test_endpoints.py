@@ -1,10 +1,42 @@
+import os
+import socket
+import threading
+import time
 import pytest
 import json
 from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
+
+_test_server = None
+
+def is_port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_server_running():
+    global _test_server
+    os.environ["ENVIRONMENT"] = "test"
+    if not is_port_in_use(8000):
+        try:
+            from server import SongBuddyHandler
+            _test_server = ThreadingHTTPServer(("127.0.0.1", 8000), SongBuddyHandler)
+            thread = threading.Thread(target=_test_server.serve_forever, daemon=True)
+            thread.start()
+            time.sleep(0.4)
+        except Exception as e:
+            pytest.skip(f"Could not bind test server to port 8000: {e}")
+    yield
+    if _test_server:
+        try:
+            _test_server.shutdown()
+            _test_server.server_close()
+        except Exception:
+            pass
 
 @pytest.fixture
 def client():
-    """Fixture for HTTP client (assumes server running on localhost:8000)"""
+    """Fixture for HTTP client"""
     return HTTPConnection("127.0.0.1", 8000, timeout=10)
 
 @pytest.mark.integration
@@ -86,3 +118,33 @@ def test_auth_flow(client):
     })
     logout_resp = client.getresponse()
     assert logout_resp.status == 200
+
+@pytest.mark.integration
+def test_queue_drawer_elements(client):
+    """Test that queue drawer remove and clear controls are served in HTML, CSS, and JS"""
+    # 1. Verify index.html contains the skip Now Playing button and clear auto recommendations button
+    client.request("GET", "/")
+    resp = client.getresponse()
+    assert resp.status == 200
+    html_content = resp.read().decode("utf-8")
+    assert "btn-queue-skip-np" in html_content
+    assert "btn-clear-auto-queue" in html_content
+    assert "btn-clear-queue" in html_content
+
+    # 2. Verify styles.css contains styles for queue removal and auto playlist rows
+    client.request("GET", "/styles.css")
+    css_resp = client.getresponse()
+    assert css_resp.status == 200
+    css_content = css_resp.read().decode("utf-8")
+    assert ".queue-item-remove-btn" in css_content
+    assert ".btn-clear-auto-queue" in css_content
+
+    # 3. Verify app.js contains queue remove handlers
+    client.request("GET", "/app.js")
+    js_resp = client.getresponse()
+    assert js_resp.status == 200
+    js_content = js_resp.read().decode("utf-8")
+    assert "removeFromQueue" in js_content
+    assert "removeFromRadioQueue" in js_content
+    assert "clearRadioQueue" in js_content
+
