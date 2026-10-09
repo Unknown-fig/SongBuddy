@@ -34,7 +34,18 @@ const state = {
   currentHeroIndex: 0,
   screenOffPlayback: localStorage.getItem('songbuddy_screenoff') !== 'false',
   keepScreenAwake: localStorage.getItem('songbuddy_keepawake') === 'true',
-  user: JSON.parse(localStorage.getItem('songbuddy_user') || 'null')
+  user: JSON.parse(localStorage.getItem('songbuddy_user') || 'null'),
+  equalizer: {
+    enabled: localStorage.getItem('songbuddy_eq_enabled') !== 'false',
+    preset: localStorage.getItem('songbuddy_eq_preset') || 'flat',
+    bands: JSON.parse(localStorage.getItem('songbuddy_eq_bands') || '[0, 0, 0, 0, 0]')
+  },
+  playbackSpeed: parseFloat(localStorage.getItem('songbuddy_playback_speed') || '1.0'),
+  sleepTimer: {
+    active: false,
+    mode: null,
+    remainingSeconds: 0
+  }
 };
 
 // ============================================================================
@@ -205,6 +216,10 @@ function onYTPlayerStateChange(event) {
     }
   } else if (event.data === 0) {
     stopYTProgressTracker();
+    if (state.sleepTimer && state.sleepTimer.active && state.sleepTimer.mode === 'track') {
+      triggerSleepTimerExecution();
+      return;
+    }
     if (state.isRepeat) {
       if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
         ytPlayer.seekTo(0, true);
@@ -584,6 +599,7 @@ async function initApp() {
   setupMediaSession();
   updateScreenOffUI();
   initPWA();
+  initAudioSuiteUI();
 
   // Load live trending tracks from server
   await loadTrendingTracks();
@@ -785,6 +801,23 @@ function clearQueue() {
   updateQueueBadge();
   renderQueueDrawer();
   showToastNotification('Queue cleared');
+}
+
+function removeFromRadioQueue(index) {
+  if (state.radioQueue && index >= 0 && index < state.radioQueue.length) {
+    const removed = state.radioQueue.splice(index, 1)[0];
+    updateQueueBadge();
+    renderQueueDrawer();
+    showToastNotification(`Removed "${removed?.title || 'track'}" from recommendations 🗑️`);
+  }
+}
+
+function clearRadioQueue() {
+  if (!state.radioQueue || state.radioQueue.length === 0) return;
+  state.radioQueue = [];
+  updateQueueBadge();
+  renderQueueDrawer();
+  showToastNotification('Auto recommendations cleared 🗑️');
 }
 
 function playQueuedTrack(index) {
@@ -1008,16 +1041,19 @@ function renderQueueDrawer() {
   const npArtist = $('queue-np-artist');
   const npThumb = $('queue-np-thumb');
   const npEq = $('queue-np-eq');
+  const skipNpBtn = $('btn-queue-skip-np');
 
   if (state.currentTrack) {
     if (npTitle) npTitle.textContent = state.currentTrack.title || 'Unknown Title';
     if (npArtist) npArtist.textContent = state.currentTrack.artist || 'Unknown Artist';
     if (npThumb) setSafeCoverArt(npThumb, state.currentTrack);
     if (npEq) npEq.style.opacity = state.isPlaying ? '1' : '0.4';
+    if (skipNpBtn) skipNpBtn.style.display = 'inline-flex';
   } else {
     if (npTitle) npTitle.textContent = 'No track playing';
     if (npArtist) npArtist.textContent = 'Choose a song to start listening';
     if (npEq) npEq.style.opacity = '0.2';
+    if (skipNpBtn) skipNpBtn.style.display = 'none';
   }
 
   // 3. Update Manual Next Up Queue
@@ -1121,6 +1157,11 @@ function renderQueueDrawer() {
   const autoListContainer = $('queue-auto-list');
   const autoHeader = $('queue-auto-header');
   const autoDesc = $('queue-auto-desc');
+  const clearAutoBtn = $('btn-clear-auto-queue');
+
+  if (clearAutoBtn) {
+    clearAutoBtn.style.display = (state.radioQueue && state.radioQueue.length > 0) ? 'inline-flex' : 'none';
+  }
 
   if (autoListContainer) {
     autoListContainer.innerHTML = '';
@@ -1173,6 +1214,12 @@ function renderQueueDrawer() {
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
+          <button class="queue-item-remove-btn queue-item-remove-auto-btn" title="Remove from recommendations" aria-label="Remove from queue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="15" height="15">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         `;
 
         row.querySelector('.queue-item-play-btn')?.addEventListener('click', (e) => {
@@ -1186,6 +1233,11 @@ function renderQueueDrawer() {
           if (added) {
             addToQueue(added);
           }
+        });
+
+        row.querySelector('.queue-item-remove-auto-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeFromRadioQueue(index);
         });
 
         row.addEventListener('click', () => {
@@ -1253,6 +1305,16 @@ async function playTrack(track, options = { startRadio: true }) {
 
   updatePlayerUI(track);
   updateMediaSession(track);
+
+  // Initialize Web Audio DSP and apply active playback speed
+  initWebAudio();
+  resumeAudioContext();
+  if (audio) {
+    audio.playbackRate = state.playbackSpeed || 1.0;
+  }
+  if (ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
+    try { ytPlayer.setPlaybackRate(state.playbackSpeed || 1.0); } catch (e) {}
+  }
 
   // Primary: Use YouTube Official Player for 100% genuine song playback (zero bot blocks / zero test sounds)
   if (track.id && (!track.streamUrl || track.id.length === 11)) {
@@ -2552,6 +2614,476 @@ function syncMediaSessionPosition(currentTime, duration) {
 }
 
 // ============================================================================
+// Web Audio API DSP Engine, 5-Band Equalizer & Spectrum Visualizer
+// ============================================================================
+let audioCtx = null;
+let audioSrcNode = null;
+let eqFilterNodes = [];
+let analyserNode = null;
+let visualizerAnimFrame = null;
+let visualizerPeaks = new Array(32).fill(0);
+let isAudioCtxConnected = false;
+
+const EQ_BANDS_CONFIG = [
+  { freq: 60, type: 'lowshelf', name: '60 Hz', label: 'Sub-Bass' },
+  { freq: 230, type: 'peaking', name: '230 Hz', label: 'Bass' },
+  { freq: 910, type: 'peaking', name: '910 Hz', label: 'Mids' },
+  { freq: 3600, type: 'peaking', name: '3.6 kHz', label: 'Presence' },
+  { freq: 14000, type: 'highshelf', name: '14 kHz', label: 'Treble' }
+];
+
+const EQ_PRESETS = {
+  flat: [0, 0, 0, 0, 0],
+  'bass-boost': [7, 4.5, 0, 1.5, 2],
+  vocal: [-2, 1.5, 5, 3.5, 1],
+  rock: [4.5, 3, -1, 3, 5],
+  pop: [2.5, 1.5, 4, 2.5, 2.5],
+  electronic: [6, 4, 1, 3, 5],
+  acoustic: [3.5, 1.5, 2.5, 3, 4],
+  treble: [-1, 0, 2, 5, 7]
+};
+
+function initWebAudio() {
+  if (isAudioCtxConnected) return;
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    if (!audioCtx) {
+      audioCtx = new AudioContextClass();
+    }
+
+    if (!audio) return;
+
+    if (!audioSrcNode) {
+      audioSrcNode = audioCtx.createMediaElementSource(audio);
+    }
+
+    // Create 5 BiquadFilterNodes
+    eqFilterNodes = EQ_BANDS_CONFIG.map((band, idx) => {
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = band.type;
+      filter.frequency.value = band.freq;
+      const gainVal = state.equalizer.enabled ? (state.equalizer.bands[idx] || 0) : 0;
+      filter.gain.value = gainVal;
+      return filter;
+    });
+
+    // Create AnalyserNode
+    analyserNode = audioCtx.createAnalyser();
+    analyserNode.fftSize = 64;
+    analyserNode.smoothingTimeConstant = 0.82;
+
+    // Connect node chain: source -> band0 -> band1 -> band2 -> band3 -> band4 -> analyser -> destination
+    let prevNode = audioSrcNode;
+    eqFilterNodes.forEach(filter => {
+      prevNode.connect(filter);
+      prevNode = filter;
+    });
+    prevNode.connect(analyserNode);
+    analyserNode.connect(audioCtx.destination);
+
+    isAudioCtxConnected = true;
+  } catch (err) {
+    console.warn('[Web Audio initialization error]:', err);
+  }
+}
+
+function resumeAudioContext() {
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(console.warn);
+  }
+}
+
+function applyEqualizerSettings() {
+  if (!eqFilterNodes || eqFilterNodes.length === 0) return;
+  const isEnabled = state.equalizer.enabled;
+  eqFilterNodes.forEach((filter, idx) => {
+    const targetGain = isEnabled ? (state.equalizer.bands[idx] || 0) : 0;
+    if (audioCtx && filter.gain.setTargetAtTime) {
+      filter.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.05);
+    } else {
+      filter.gain.value = targetGain;
+    }
+  });
+}
+
+function setEqualizerPreset(presetName) {
+  const gains = EQ_PRESETS[presetName] || EQ_PRESETS.flat;
+  state.equalizer.preset = presetName;
+  state.equalizer.bands = [...gains];
+  localStorage.setItem('songbuddy_eq_preset', presetName);
+  localStorage.setItem('songbuddy_eq_bands', JSON.stringify(state.equalizer.bands));
+
+  updateEqualizerUI();
+  applyEqualizerSettings();
+  showToastNotification(`EQ Preset: ${presetName.charAt(0).toUpperCase() + presetName.slice(1).replace('-', ' ')} 🎛️`);
+}
+
+function setEqualizerBand(bandIndex, gainDb) {
+  state.equalizer.bands[bandIndex] = gainDb;
+  state.equalizer.preset = 'custom';
+  localStorage.setItem('songbuddy_eq_preset', 'custom');
+  localStorage.setItem('songbuddy_eq_bands', JSON.stringify(state.equalizer.bands));
+
+  document.querySelectorAll('.eq-preset-pill').forEach(pill => pill.classList.remove('active'));
+  const valEl = $(`eq-val-${bandIndex}`);
+  if (valEl) {
+    valEl.textContent = `${gainDb > 0 ? '+' : ''}${gainDb.toFixed(1)} dB`;
+  }
+  applyEqualizerSettings();
+}
+
+function toggleEqualizerMaster(enabled) {
+  state.equalizer.enabled = enabled;
+  localStorage.setItem('songbuddy_eq_enabled', String(enabled));
+  const toggleStatus = $('eq-toggle-status');
+  if (toggleStatus) {
+    toggleStatus.textContent = enabled ? 'EQ ON' : 'BYPASS';
+    toggleStatus.style.color = enabled ? 'var(--accent-emerald, #10b981)' : 'var(--text-muted, #64748b)';
+  }
+  const checkbox = $('eq-master-toggle');
+  if (checkbox) checkbox.checked = enabled;
+  applyEqualizerSettings();
+  showToastNotification(enabled ? 'Equalizer Activated ⚡' : 'Equalizer Bypassed (Flat Audio)');
+}
+
+function updateEqualizerUI() {
+  const checkbox = $('eq-master-toggle');
+  if (checkbox) checkbox.checked = state.equalizer.enabled;
+
+  const toggleStatus = $('eq-toggle-status');
+  if (toggleStatus) {
+    toggleStatus.textContent = state.equalizer.enabled ? 'EQ ON' : 'BYPASS';
+    toggleStatus.style.color = state.equalizer.enabled ? 'var(--accent-emerald, #10b981)' : 'var(--text-muted, #64748b)';
+  }
+
+  // Update slider positions and readouts
+  state.equalizer.bands.forEach((gain, idx) => {
+    const slider = $(`eq-slider-${idx}`);
+    if (slider) slider.value = gain;
+    const valEl = $(`eq-val-${idx}`);
+    if (valEl) valEl.textContent = `${gain > 0 ? '+' : ''}${gain.toFixed(1)} dB`;
+  });
+
+  // Update preset pills
+  document.querySelectorAll('.eq-preset-pill').forEach(pill => {
+    pill.classList.toggle('active', pill.dataset.preset === state.equalizer.preset);
+  });
+}
+
+function openEqualizerModal() {
+  initWebAudio();
+  resumeAudioContext();
+  updateEqualizerUI();
+  $('equalizer-modal')?.classList.remove('hidden');
+  startSpectrumVisualizer();
+}
+
+function closeEqualizerModal() {
+  $('equalizer-modal')?.classList.add('hidden');
+  stopSpectrumVisualizer();
+}
+
+function startSpectrumVisualizer() {
+  stopSpectrumVisualizer();
+  const canvas = $('equalizer-visualizer-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const dataArray = new Uint8Array(32);
+
+  function renderFrame() {
+    visualizerAnimFrame = requestAnimationFrame(renderFrame);
+
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    let hasLiveSignal = false;
+    if (analyserNode && state.isPlaying && !isYTActive) {
+      analyserNode.getByteFrequencyData(dataArray);
+      hasLiveSignal = dataArray.some(val => val > 0);
+    }
+
+    if (!hasLiveSignal && state.isPlaying) {
+      const time = performance.now() * 0.0035;
+      for (let i = 0; i < 32; i++) {
+        const bassFactor = (32 - i) / 32;
+        const wave1 = Math.sin(time * 2.1 + i * 0.38) * 0.5 + 0.5;
+        const wave2 = Math.cos(time * 2.8 - i * 0.22) * 0.5 + 0.5;
+        const beat = (Math.sin(time * 3.2) > 0.65 ? 1.3 : 0.82);
+        const synthVal = Math.min(255, Math.floor((wave1 * 0.6 + wave2 * 0.4) * 200 * bassFactor * beat + 24));
+        dataArray[i] = synthVal;
+      }
+    } else if (!state.isPlaying) {
+      for (let i = 0; i < 32; i++) {
+        dataArray[i] = Math.max(0, dataArray[i] - 14);
+      }
+    }
+
+    const barCount = 32;
+    const totalGap = 4;
+    const barWidth = (width - (barCount - 1) * totalGap) / barCount;
+
+    const isNeumorphic = document.documentElement.getAttribute('data-theme') === 'neumorphic';
+    const gradient = ctx.createLinearGradient(0, height, 0, 0);
+    if (isNeumorphic) {
+      gradient.addColorStop(0, '#52796f');
+      gradient.addColorStop(0.65, '#84a98c');
+      gradient.addColorStop(1, '#a3b18a');
+    } else {
+      gradient.addColorStop(0, '#6366f1');
+      gradient.addColorStop(0.5, '#06b6d4');
+      gradient.addColorStop(1, '#10b981');
+    }
+
+    for (let i = 0; i < barCount; i++) {
+      const val = dataArray[i];
+      const barHeight = Math.max(3, (val / 255) * (height - 12));
+      const x = i * (barWidth + totalGap);
+      const y = height - barHeight;
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(x, y, barWidth, barHeight, [3, 3, 0, 0]);
+      } else {
+        ctx.rect(x, y, barWidth, barHeight);
+      }
+      ctx.fill();
+
+      if (barHeight > visualizerPeaks[i]) {
+        visualizerPeaks[i] = barHeight;
+      } else {
+        visualizerPeaks[i] = Math.max(0, visualizerPeaks[i] - 1.2);
+      }
+
+      const peakY = height - visualizerPeaks[i] - 2;
+      ctx.fillStyle = isNeumorphic ? '#2d3748' : '#ffffff';
+      ctx.fillRect(x, Math.max(0, peakY), barWidth, 2);
+    }
+  }
+
+  renderFrame();
+}
+
+function stopSpectrumVisualizer() {
+  if (visualizerAnimFrame) {
+    cancelAnimationFrame(visualizerAnimFrame);
+    visualizerAnimFrame = null;
+  }
+}
+
+// ============================================================================
+// Playback Speed Controller Engine
+// ============================================================================
+function setPlaybackSpeed(speed) {
+  const numSpeed = parseFloat(speed);
+  state.playbackSpeed = numSpeed;
+  localStorage.setItem('songbuddy_playback_speed', String(numSpeed));
+
+  if (audio) {
+    audio.playbackRate = numSpeed;
+  }
+
+  if (ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') {
+    try {
+      ytPlayer.setPlaybackRate(numSpeed);
+    } catch (e) {
+      console.warn('[YT playbackRate error]:', e);
+    }
+  }
+
+  const label = $('speed-badge-text');
+  if (label) label.textContent = `${numSpeed}x`;
+
+  document.querySelectorAll('.speed-option').forEach(btn => {
+    btn.classList.toggle('active', parseFloat(btn.dataset.speed) === numSpeed);
+  });
+
+  closePlaybackSpeedPopover();
+  showToastNotification(`Playback Speed: ${numSpeed}x ⚡`);
+}
+
+function openPlaybackSpeedPopover(anchorEl) {
+  const popover = $('playback-speed-popover');
+  if (!popover) return;
+
+  if (anchorEl) {
+    const rect = anchorEl.getBoundingClientRect();
+    popover.style.bottom = `${Math.max(10, window.innerHeight - rect.top + 8)}px`;
+    popover.style.right = `${Math.max(16, window.innerWidth - rect.right - 10)}px`;
+  }
+
+  popover.classList.remove('hidden');
+
+  const handleOutsideClick = (e) => {
+    if (!popover.contains(e.target) && e.target !== anchorEl && !anchorEl?.contains(e.target)) {
+      closePlaybackSpeedPopover();
+      document.removeEventListener('click', handleOutsideClick);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', handleOutsideClick), 50);
+}
+
+function closePlaybackSpeedPopover() {
+  $('playback-speed-popover')?.classList.add('hidden');
+}
+
+function togglePlaybackSpeedPopover(anchorEl) {
+  const popover = $('playback-speed-popover');
+  if (!popover) return;
+  if (popover.classList.contains('hidden')) {
+    openPlaybackSpeedPopover(anchorEl);
+  } else {
+    closePlaybackSpeedPopover();
+  }
+}
+
+// ============================================================================
+// Sleep Timer Engine with Smooth Fade-Out
+// ============================================================================
+let sleepTimerTicker = null;
+
+function setSleepTimer(option) {
+  clearSleepTimer();
+
+  if (option === 'track') {
+    state.sleepTimer = {
+      active: true,
+      mode: 'track',
+      remainingSeconds: 0
+    };
+    updateSleepTimerBanner();
+    showToastNotification('Sleep Timer: Stops at end of current track 🌙');
+    closeSleepTimerModal();
+    return;
+  }
+
+  const minutes = parseInt(option, 10);
+  if (!minutes || isNaN(minutes)) return;
+
+  const totalSec = minutes * 60;
+  state.sleepTimer = {
+    active: true,
+    mode: 'minutes',
+    remainingSeconds: totalSec
+  };
+
+  updateSleepTimerBanner();
+  showToastNotification(`Sleep Timer set for ${minutes} minutes 🌙`);
+
+  sleepTimerTicker = setInterval(() => {
+    if (!state.sleepTimer.active) {
+      clearSleepTimer();
+      return;
+    }
+
+    state.sleepTimer.remainingSeconds -= 1;
+    updateSleepTimerBanner();
+
+    if (state.sleepTimer.remainingSeconds <= 0) {
+      triggerSleepTimerExecution();
+    }
+  }, 1000);
+
+  closeSleepTimerModal();
+}
+
+function clearSleepTimer() {
+  if (sleepTimerTicker) {
+    clearInterval(sleepTimerTicker);
+    sleepTimerTicker = null;
+  }
+  state.sleepTimer = {
+    active: false,
+    mode: null,
+    remainingSeconds: 0
+  };
+  updateSleepTimerBanner();
+}
+
+function openSleepTimerModal() {
+  updateSleepTimerBanner();
+  $('sleep-timer-modal')?.classList.remove('hidden');
+}
+
+function closeSleepTimerModal() {
+  $('sleep-timer-modal')?.classList.add('hidden');
+}
+
+function updateSleepTimerBanner() {
+  const banner = $('sleep-timer-active-banner');
+  const display = $('sleep-timer-display');
+  const indicator = $('timer-active-indicator');
+
+  if (!state.sleepTimer.active) {
+    if (banner) banner.classList.add('hidden');
+    if (indicator) indicator.classList.add('hidden');
+    return;
+  }
+
+  if (indicator) indicator.classList.remove('hidden');
+
+  if (banner) {
+    banner.classList.remove('hidden');
+    if (display) {
+      if (state.sleepTimer.mode === 'track') {
+        display.textContent = 'End of Track';
+      } else {
+        const mins = Math.floor(state.sleepTimer.remainingSeconds / 60);
+        const secs = state.sleepTimer.remainingSeconds % 60;
+        display.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }
+    }
+  }
+}
+
+function triggerSleepTimerExecution() {
+  clearSleepTimer();
+
+  const startVolume = audio ? audio.volume : (state.volume || 0.8);
+  const fadeSteps = 15;
+  const fadeInterval = 200;
+  let step = 0;
+
+  const fadeTimer = setInterval(() => {
+    step++;
+    const currentVol = Math.max(0, startVolume * (1 - step / fadeSteps));
+    if (audio) audio.volume = currentVol;
+    if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
+      try { ytPlayer.setVolume(Math.floor(currentVol * 100)); } catch (e) {}
+    }
+
+    if (step >= fadeSteps) {
+      clearInterval(fadeTimer);
+      if (state.isPlaying) {
+        togglePlayPause();
+      }
+      if (audio) audio.volume = startVolume;
+      if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
+        try { ytPlayer.setVolume(Math.floor(startVolume * 100)); } catch (e) {}
+      }
+      showToastNotification('Sleep Timer: Music auto-paused. Good night! 🌙');
+    }
+  }, fadeInterval);
+}
+
+function initAudioSuiteUI() {
+  const speedLabel = $('speed-badge-text');
+  if (speedLabel) speedLabel.textContent = `${state.playbackSpeed || 1.0}x`;
+
+  document.querySelectorAll('.speed-option').forEach(btn => {
+    btn.classList.toggle('active', parseFloat(btn.dataset.speed) === (state.playbackSpeed || 1.0));
+  });
+
+  updateEqualizerUI();
+  updateSleepTimerBanner();
+}
+
+// ============================================================================
 // Event Listeners Setup
 // ============================================================================
 function setupAudioListeners() {
@@ -2572,6 +3104,10 @@ function setupAudioListeners() {
   });
 
   audio.addEventListener('ended', () => {
+    if (state.sleepTimer && state.sleepTimer.active && state.sleepTimer.mode === 'track') {
+      triggerSleepTimerExecution();
+      return;
+    }
     if (!isYTActive) {
       if (state.isRepeat) {
         audio.currentTime = 0;
@@ -2994,6 +3530,19 @@ function setupEventListeners() {
         toggleCinemaAmbilight();
         return;
       }
+      // 'E' -> Equalizer Studio
+      if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        openEqualizerModal();
+        return;
+      }
+
+      // 'T' -> Sleep Timer
+      if (e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        openSleepTimerModal();
+        return;
+      }
     }
 
     // 5. Escape -> Close any open modals
@@ -3002,6 +3551,9 @@ function setupEventListeners() {
       closeLyrics();
       closeCinemaAmbilight();
       closeAuthModal();
+      closeEqualizerModal();
+      closeSleepTimerModal();
+      closePlaybackSpeedPopover();
     }
   });
 
@@ -3171,7 +3723,10 @@ function setupEventListeners() {
 
   // Neumorphic Chips & Actions
   $('chip-lyrics')?.addEventListener('click', openLyrics);
-  $('chip-equalizer')?.addEventListener('click', () => togglePlayPause());
+  $('chip-equalizer')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openEqualizerModal();
+  });
 
   // Queue Overlay Drawer & Nav Listeners
   $('btn-neu-queue')?.addEventListener('click', () => openQueueDrawer());
@@ -3179,6 +3734,14 @@ function setupEventListeners() {
   $('btn-close-queue')?.addEventListener('click', () => closeQueueDrawer());
   $('queue-drawer-backdrop')?.addEventListener('click', () => closeQueueDrawer());
   $('btn-clear-queue')?.addEventListener('click', () => clearQueue());
+  $('btn-clear-auto-queue')?.addEventListener('click', () => clearRadioQueue());
+  $('btn-queue-skip-np')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!state.currentTrack) return;
+    const skippedTitle = state.currentTrack.title;
+    playNextTrack(true);
+    showToastNotification(`Skipped "${skippedTitle}" ⏭`);
+  });
 
   // Autoplay Switch in Queue Drawer
   const autoplaySwitch = $('queue-autoplay-switch');
@@ -3226,6 +3789,49 @@ function setupEventListeners() {
     if (state.currentTrack) {
       toggleLike(state.currentTrack);
     }
+  });
+
+  // Audio Suite: Equalizer, Speed & Sleep Timer Buttons
+  $('btn-neu-speed')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePlaybackSpeedPopover($('btn-neu-speed'));
+  });
+
+  $('btn-neu-timer')?.addEventListener('click', () => openSleepTimerModal());
+  $('btn-neu-eq')?.addEventListener('click', () => openEqualizerModal());
+  $('cinema-btn-eq')?.addEventListener('click', () => openEqualizerModal());
+
+  // Equalizer Modal Controls
+  $('btn-close-equalizer')?.addEventListener('click', closeEqualizerModal);
+  $('equalizer-backdrop')?.addEventListener('click', closeEqualizerModal);
+  $('eq-master-toggle')?.addEventListener('change', (e) => toggleEqualizerMaster(e.target.checked));
+  $('btn-eq-reset')?.addEventListener('click', () => setEqualizerPreset('flat'));
+
+  document.querySelectorAll('.eq-preset-pill').forEach(pill => {
+    pill.addEventListener('click', () => setEqualizerPreset(pill.dataset.preset));
+  });
+
+  for (let b = 0; b <= 4; b++) {
+    $(`eq-slider-${b}`)?.addEventListener('input', (e) => {
+      setEqualizerBand(b, parseFloat(e.target.value));
+    });
+  }
+
+  // Sleep Timer Controls
+  $('btn-close-sleep-timer')?.addEventListener('click', closeSleepTimerModal);
+  $('sleep-timer-backdrop')?.addEventListener('click', closeSleepTimerModal);
+  $('btn-cancel-timer')?.addEventListener('click', () => {
+    clearSleepTimer();
+    showToastNotification('Sleep Timer turned off');
+  });
+
+  document.querySelectorAll('.sleep-option-btn').forEach(btn => {
+    btn.addEventListener('click', () => setSleepTimer(btn.dataset.minutes));
+  });
+
+  // Playback Speed Options
+  document.querySelectorAll('.speed-option').forEach(btn => {
+    btn.addEventListener('click', () => setPlaybackSpeed(btn.dataset.speed));
   });
 
   // Floating Bottom Clay Dock
