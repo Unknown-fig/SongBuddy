@@ -8961,4 +8961,119 @@ body.tv-mode-active .screen-ambilight-wrapper {
   transform: translateY(-2px);
 }
 
+/* ==========================================================================
+   SPONSORBLOCK & NETWORK RESILIENCE STYLING
+   Pitch Black OLED aesthetics (#000000), crisp SVGs, zero emojis
+   ========================================================================== */
+.neu-sub-btn#btn-neu-sponsorblock.active {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
+}
+
+.sponsorblock-toast {
+  position: fixed;
+  bottom: 104px;
+  right: 28px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(10, 10, 10, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.85), 0 0 16px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 10px 16px;
+  border-radius: 12px;
+  color: #ffffff;
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease;
+  pointer-events: auto;
+}
+
+.sponsorblock-toast.hidden {
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+}
+
+.sb-toast-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.sb-toast-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sb-toast-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.sb-toast-detail {
+  font-size: 0.72rem;
+  color: #999999;
+}
+
+.sb-toast-undo {
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
+  margin-left: 6px;
+  transition: all 0.2s ease;
+}
+
+.sb-toast-undo:hover {
+  background: #e5e5e5;
+  transform: scale(1.04);
+}
+
+.stream-recovery-toast {
+  position: fixed;
+  bottom: 104px;
+  left: 28px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(8, 8, 8, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 8px 14px;
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 0.78rem;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.stream-recovery-toast.hidden {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+
 

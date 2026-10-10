@@ -1145,6 +1145,11 @@
             <circle cx="12" cy="10" r="2"></circle>
             <circle cx="20" cy="14" r="2"></circle>
           </svg>
+        <button class="neu-sub-btn active" id="btn-neu-sponsorblock" title="SponsorBlock: Auto-Skip Skits &amp; Intros (Active)" aria-label="Toggle SponsorBlock Auto-Skip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+            <polygon points="5 4 15 12 5 20 5 4"></polygon>
+            <line x1="19" y1="5" x2="19" y2="19" stroke-width="2.5"></line>
+          </svg>
         </button>
         <button class="neu-sub-btn" id="btn-neu-cast" title="Wireless Stream / Cast (AirPlay, DLNA, Cast)" aria-label="Wireless Cast">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
@@ -2460,6 +2465,28 @@
         </div>
       </div>
     </div>
+  <!-- SponsorBlock Intelligent Skip Toast Badge (Zero emojis, OLED aesthetic) -->
+  <div class="sponsorblock-toast hidden" id="sponsorblock-toast" role="status" aria-live="polite">
+    <div class="sb-toast-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+        <polygon points="5 4 15 12 5 20 5 4"></polygon>
+        <line x1="19" y1="5" x2="19" y2="19" stroke-width="2.5"></line>
+      </svg>
+    </div>
+    <div class="sb-toast-content">
+      <span class="sb-toast-title" id="sb-toast-title">Skipped Intro Skit</span>
+      <span class="sb-toast-detail" id="sb-toast-detail">+14s saved</span>
+    </div>
+    <button type="button" class="sb-toast-undo" id="btn-sb-undo" title="Revert skip and play section">Undo</button>
+  </div>
+
+  <!-- CDN Stream Auto-Recovery Toast -->
+  <div class="stream-recovery-toast hidden" id="stream-recovery-toast" role="status">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+      <path d="M23 4v6h-6"></path>
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+    </svg>
+    <span id="stream-recovery-msg">Stream token refreshed via CDN fallback</span>
   </div>
 
   <!-- YouTube IFrame API -->

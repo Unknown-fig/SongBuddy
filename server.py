@@ -39,6 +39,12 @@ from validators import (
 from rate_limiter import AdvancedRateLimiter
 from library_store import library_store
 from importer import import_playlist_by_url
+from network_resilience import (
+    cookie_pool_manager,
+    fetch_sponsorblock_segments,
+    inspect_cdn_stream_expiry,
+    refresh_stream_token
+)
 
 # Track server start time
 SERVER_START_TIME = time.time()
@@ -422,98 +428,8 @@ def has_valid_netscape_cookies(path_or_content: Optional[Union[Path, str]]) -> b
     return False
 
 def get_cookie_health_status() -> Dict[str, Any]:
-    """Automated probe inspecting YouTube session cookies, validity, and expiry horizons."""
-    raw_cookies = os.getenv("YOUTUBE_COOKIES")
-    raw_cookies_b64 = os.getenv("YOUTUBE_COOKIES_B64")
-    source = "none"
-    cookie_text = None
-
-    if raw_cookies_b64 and not raw_cookies:
-        try:
-            import base64
-            cookie_text = base64.b64decode(raw_cookies_b64.strip()).decode("utf-8", errors="ignore")
-            source = "env_b64"
-        except Exception:
-            pass
-    elif raw_cookies:
-        cookie_text = raw_cookies
-        source = "env_raw"
-
-    if not cookie_text:
-        try:
-            from cookies_data import EMBEDDED_COOKIES
-            if EMBEDDED_COOKIES and has_valid_netscape_cookies(EMBEDDED_COOKIES):
-                cookie_text = EMBEDDED_COOKIES
-                source = "embedded"
-        except ImportError:
-            pass
-
-    if not cookie_text:
-        candidate = Path("/tmp/youtube_cookies.txt") if os.getenv("VERCEL") else BASE_DIR / "cookies.txt"
-        if candidate.exists() and has_valid_netscape_cookies(candidate):
-            try:
-                cookie_text = candidate.read_text(encoding="utf-8", errors="ignore")
-                source = "file"
-            except Exception:
-                pass
-
-    if not cookie_text:
-        return {
-            "status": "missing",
-            "source": "none",
-            "entries_count": 0,
-            "earliest_expiry": None,
-            "days_remaining": 0,
-            "authenticated": False,
-            "message": "No YouTube cookies configured. Operating with native mobile client bypass."
-        }
-
-    valid_entries = 0
-    expiries = []
-    has_auth_cookie = False
-
-    for line in cookie_text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = line.split("\t")
-        if len(parts) >= 7:
-            valid_entries += 1
-            cookie_name = parts[5]
-            if cookie_name in ("LOGIN_INFO", "SID", "SSID", "__Secure-3PAPISID", "__Secure-1PSID"):
-                has_auth_cookie = True
-            try:
-                exp_ts = int(parts[4])
-                if exp_ts > 0:
-                    expiries.append(exp_ts)
-            except (ValueError, TypeError):
-                pass
-
-    now_ts = int(time.time())
-    if expiries:
-        earliest_exp = min(expiries)
-        days_left = round((earliest_exp - now_ts) / 86400, 1)
-        if days_left < 0:
-            status = "expired"
-        elif days_left < 7:
-            status = "expiring_soon"
-        else:
-            status = "healthy"
-        exp_iso = datetime.fromtimestamp(earliest_exp, tz=timezone.utc).isoformat()
-    else:
-        status = "healthy" if valid_entries > 0 else "missing"
-        days_left = 999.0
-        exp_iso = None
-
-    return {
-        "status": status,
-        "source": source,
-        "authenticated": has_auth_cookie,
-        "entries_count": valid_entries,
-        "earliest_expiry": exp_iso,
-        "days_remaining": days_left,
-        "message": f"Cookie probe reports status: {status} ({days_left} days remaining, {valid_entries} entries)"
-    }
+    """Automated probe inspecting YouTube session cookies, pool rotation, and expiry horizons."""
+    return cookie_pool_manager.get_health_metrics()
 
 def resolve_stream_fallback(video_id: str, quality: str = "high") -> Optional[Dict[str, Any]]:
     """Secondary audio resolver querying high-availability Piped API and Invidious public instances."""
@@ -614,36 +530,8 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
             else:
                 audio_fmt = "bestaudio/best"
 
-            # Support cookiefile ONLY if valid, authenticated cookies are explicitly provided
-            cookie_path = None
-            raw_cookies = os.getenv("YOUTUBE_COOKIES")
-            raw_cookies_b64 = os.getenv("YOUTUBE_COOKIES_B64")
-            if raw_cookies_b64 and not raw_cookies:
-                try:
-                    import base64
-                    raw_cookies = base64.b64decode(raw_cookies_b64.strip()).decode("utf-8")
-                except Exception as b64_err:
-                    logger.warning(f"Failed to decode YOUTUBE_COOKIES_B64: {b64_err}")
-
-            if not raw_cookies:
-                try:
-                    from cookies_data import EMBEDDED_COOKIES
-                    if EMBEDDED_COOKIES and has_valid_netscape_cookies(EMBEDDED_COOKIES):
-                        raw_cookies = EMBEDDED_COOKIES
-                except ImportError:
-                    pass
-
-            if raw_cookies and has_valid_netscape_cookies(raw_cookies):
-                cookie_path = Path("/tmp/youtube_cookies.txt") if os.getenv("VERCEL") else BASE_DIR / "cookies.txt"
-                try:
-                    with open(cookie_path, "w", encoding="utf-8") as cf:
-                        cf.write(raw_cookies)
-                except Exception as ce:
-                    logger.warning(f"Failed to write cookie file: {ce}")
-            elif (BASE_DIR / "cookies.txt").exists():
-                candidate = BASE_DIR / "cookies.txt"
-                if has_valid_netscape_cookies(candidate):
-                    cookie_path = candidate
+            # Support cookiefile managed dynamically by CookiePoolManager
+            cookie_path = cookie_pool_manager.get_active_cookie_file()
 
             proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("HTTP_PROXY")
             info = None
@@ -721,7 +609,11 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
                     return info
 
             if not info:
+                if "429" in str(last_err) or "bot" in str(last_err).lower():
+                    cookie_pool_manager.report_error(429)
                 raise RuntimeError(f"All extraction tiers and secondary resolvers failed: {last_err}")
+
+            cookie_pool_manager.report_success()
 
             stream_url = info.get("url") if info else None
             if not stream_url:
@@ -1603,6 +1495,29 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 self.send_json_error(400, f"Playlist import failure: {str(ie)}")
             return
 
+        # 6. Anti-Bot: Dynamic Cookie Session Rotation
+        elif path == "/api/cookies/rotate":
+            rotated = cookie_pool_manager.rotate_to_next(reason="api_manual_trigger")
+            self.send_json_response({"success": rotated, "metrics": cookie_pool_manager.get_health_metrics()})
+            return
+
+        # 7. Smart Stream CDN Token Refresh
+        elif path == "/api/stream/refresh":
+            vid = post_data.get("id", "")
+            offset = int(post_data.get("offset", 0))
+            try:
+                VideoIDValidator(id=vid)
+            except ValidationError:
+                self.send_json_error(400, "Invalid YouTube video ID parameter.")
+                return
+            try:
+                refreshed = refresh_stream_token(vid, sys.modules[__name__], byte_offset=offset)
+                self.send_json_response(refreshed)
+            except Exception as e:
+                logger.error(f"Failed to refresh stream token for {vid}: {e}")
+                self.send_json_error(500, f"Stream token refresh failed: {str(e)}")
+            return
+
         self.send_error(404, "Endpoint not found.")
 
     def do_DELETE(self):
@@ -1649,8 +1564,9 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             return
 
         PUBLIC_ENDPOINTS = {
-            "/", "/api/trending", "/api/health", "/api/search", "/api/radio",
-            "/api/lyrics", "/api/lyrics/sse", "/api/karaoke", "/api/stream",
+            "/", "/api/trending", "/api/health", "/api/health/cookies", "/api/search", "/api/radio",
+            "/api/lyrics", "/api/lyrics/sse", "/api/karaoke", "/api/stream", "/api/stream/refresh",
+            "/api/sponsorblock", "/api/cookies/rotate",
             "/api/user/playlists", "/api/user/favorites", "/api/user/history",
             "/api/user/smart-playlists", "/api/import/playlist"
         }
@@ -1684,6 +1600,44 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error("Health check failed", exc_info=True)
                 self.send_error(503, f"Health check failed: {str(e)}")
+            return
+
+        # 0a. API: Cookie Pool Health Heartbeat
+        elif path == "/api/health/cookies":
+            self.send_json_response(cookie_pool_manager.get_health_metrics())
+            return
+
+        # 0b. API: SponsorBlock Auto-Skip Segments
+        elif path == "/api/sponsorblock":
+            vid = params.get("id", [""])[0]
+            try:
+                VideoIDValidator(id=vid)
+            except ValidationError:
+                self.send_json_error(400, "Invalid YouTube video ID parameter format.")
+                return
+            segments = fetch_sponsorblock_segments(vid)
+            self.send_json_response(segments)
+            return
+
+        # 0c. API: Smart Stream Token Refresh & Byte Resumption
+        elif path == "/api/stream/refresh":
+            vid = params.get("id", [""])[0]
+            offset_str = params.get("offset", ["0"])[0]
+            try:
+                VideoIDValidator(id=vid)
+            except ValidationError:
+                self.send_json_error(400, "Invalid YouTube video ID parameter format.")
+                return
+            try:
+                byte_offset = int(offset_str)
+            except (ValueError, TypeError):
+                byte_offset = 0
+            try:
+                refreshed = refresh_stream_token(vid, sys.modules[__name__], byte_offset=byte_offset)
+                self.send_json_response(refreshed)
+            except Exception as e:
+                logger.error(f"Failed to refresh stream token for {vid}: {e}")
+                self.send_json_error(500, f"Stream token refresh failed: {str(e)}")
             return
 
         # 1. API: Trending / Featured Tracks

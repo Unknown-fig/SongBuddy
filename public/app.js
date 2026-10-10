@@ -65,7 +65,22 @@ const state = {
   smartPlaylists: { on_repeat: [], recently_played: [], jump_back_in: [] },
   offlineTracks: [],
   activeLibraryTab: 'favourites',
-  listeningStats: JSON.parse(localStorage.getItem('songbuddy_listening_stats') || '{"tracksPlayed":0,"totalMinutes":0,"playCounts":{}}')
+  listeningStats: JSON.parse(localStorage.getItem('songbuddy_listening_stats') || '{"tracksPlayed":0,"totalMinutes":0,"playCounts":{}}'),
+  sponsorblock: {
+    enabled: localStorage.getItem('songbuddy_sponsorblock_enabled') !== 'false',
+    segments: [],
+    skippedSegments: new Set(),
+    bypassedStarts: new Set(),
+    lastSkipped: null,
+    undoTimeout: null
+  },
+  networkResilience: {
+    adaptiveBitrate: true,
+    effectiveType: '4g',
+    downlink: 10,
+    isRecovering: false,
+    recoveryTimeout: null
+  }
 };
 
 // ============================================================================
@@ -286,6 +301,9 @@ function updateProgressUI(cur, dur) {
   if (typeof checkCrossfadeTrigger === 'function') {
     checkCrossfadeTrigger(cur, dur);
   }
+  if (typeof checkSponsorBlockSkip === 'function') {
+    checkSponsorBlockSkip(cur, dur);
+  }
   if (typeof recordTrackListeningTelemetry === 'function' && state.currentTrack) {
     recordTrackListeningTelemetry(state.currentTrack, cur, dur);
   }
@@ -318,6 +336,180 @@ function seekPlayerTo(seconds) {
     audio.currentTime = seconds;
   }
 }
+
+// ============================================================================
+// Network Resilience & SponsorBlock Auto-Skipping Engine
+// ============================================================================
+async function fetchTrackSponsorBlock(videoId) {
+  if (!videoId) return;
+  state.sponsorblock.segments = [];
+  state.sponsorblock.skippedSegments = new Set();
+  state.sponsorblock.bypassedStarts = new Set();
+  state.sponsorblock.lastSkipped = null;
+
+  try {
+    const res = await fetch(`/api/sponsorblock?id=${encodeURIComponent(videoId)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.has_segments && Array.isArray(data.segments)) {
+      state.sponsorblock.segments = data.segments;
+      console.log(`[SponsorBlock] Loaded ${data.segments.length} skip segment(s) for ${videoId}:`, data.segments);
+    }
+  } catch (err) {
+    console.debug('[SponsorBlock] Fetch ignored or failed:', err);
+  }
+}
+
+function checkSponsorBlockSkip(curTime, dur) {
+  if (!state.sponsorblock.enabled || !state.sponsorblock.segments || state.sponsorblock.segments.length === 0) {
+    return;
+  }
+  const cur = typeof curTime === 'number' ? curTime : 0;
+  for (const seg of state.sponsorblock.segments) {
+    if (cur >= seg.start && cur < (seg.end - 0.25)) {
+      if (state.sponsorblock.skippedSegments.has(seg.start) || state.sponsorblock.bypassedStarts.has(seg.start)) {
+        continue;
+      }
+      // Record skip
+      state.sponsorblock.skippedSegments.add(seg.start);
+      state.sponsorblock.lastSkipped = seg;
+      console.log(`[SponsorBlock] Auto-skipping ${seg.label} [${seg.start}s -> ${seg.end}s]`);
+      seekPlayerTo(seg.end);
+      showSponsorBlockToast(seg);
+      break;
+    }
+  }
+}
+
+function showSponsorBlockToast(seg) {
+  const toast = $('sponsorblock-toast');
+  if (!toast) return;
+
+  const titleEl = $('sb-toast-title');
+  const detailEl = $('sb-toast-detail');
+  if (titleEl) titleEl.textContent = `Skipped ${seg.label || 'Non-Music Skit'}`;
+  if (detailEl) detailEl.textContent = `+${Math.round(seg.duration)}s saved`;
+
+  toast.classList.remove('hidden');
+
+  if (state.sponsorblock.undoTimeout) {
+    clearTimeout(state.sponsorblock.undoTimeout);
+  }
+  state.sponsorblock.undoTimeout = setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 4500);
+}
+
+function revertSponsorBlockSkip() {
+  const seg = state.sponsorblock.lastSkipped;
+  const toast = $('sponsorblock-toast');
+  if (toast) toast.classList.add('hidden');
+  if (!seg) return;
+
+  state.sponsorblock.bypassedStarts.add(seg.start);
+  console.log(`[SponsorBlock] User undid skip. Seeking back to ${seg.start}s`);
+  seekPlayerTo(seg.start);
+}
+
+function toggleSponsorBlock() {
+  state.sponsorblock.enabled = !state.sponsorblock.enabled;
+  localStorage.setItem('songbuddy_sponsorblock_enabled', String(state.sponsorblock.enabled));
+  const btn = $('btn-neu-sponsorblock');
+  if (btn) {
+    btn.classList.toggle('active', state.sponsorblock.enabled);
+    btn.title = state.sponsorblock.enabled
+      ? 'SponsorBlock: Auto-Skip Skits & Intros (Active)'
+      : 'SponsorBlock: Auto-Skip Disabled (Click to Enable)';
+  }
+}
+
+async function triggerStreamRecovery(offset = 0) {
+  if (state.networkResilience.isRecovering || !state.currentTrack || !state.currentTrack.id) return;
+  state.networkResilience.isRecovering = true;
+
+  const recoveryToast = $('stream-recovery-toast');
+  const recoveryMsg = $('stream-recovery-msg');
+  if (recoveryToast && recoveryMsg) {
+    recoveryMsg.textContent = 'Refreshing stream token via CDN recovery...';
+    recoveryToast.classList.remove('hidden');
+  }
+
+  const cleanOffset = Math.max(0, Math.floor(offset));
+  try {
+    const res = await fetch(`/api/stream/refresh?id=${encodeURIComponent(state.currentTrack.id)}&offset=${cleanOffset}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    if (data && data.stream_url && audio) {
+      console.log('[CDN Recovery] Successfully received fresh playback URL.');
+      audio.src = data.stream_url;
+      audio.load();
+
+      const onCanPlay = () => {
+        audio.removeEventListener('canplay', onCanPlay);
+        try {
+          if (cleanOffset > 0) audio.currentTime = cleanOffset;
+          audio.play().then(() => updatePlayPauseIcons(true)).catch(console.warn);
+        } catch (e) {
+          console.warn('[CDN Recovery Playback Error]:', e);
+        }
+      };
+      audio.addEventListener('canplay', onCanPlay);
+
+      if (recoveryMsg) recoveryMsg.textContent = 'Resumed stream via CDN token recovery';
+      setTimeout(() => {
+        if (recoveryToast) recoveryToast.classList.add('hidden');
+      }, 3000);
+      return;
+    }
+  } catch (err) {
+    console.warn('[CDN Recovery] Token refresh failed:', err);
+    if (recoveryToast) recoveryToast.classList.add('hidden');
+    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+      isYTActive = true;
+      ytPlayer.loadVideoById(state.currentTrack.id, cleanOffset);
+      ytPlayer.playVideo();
+      updatePlayPauseIcons(true);
+      startYTProgressTracker();
+    }
+  } finally {
+    state.networkResilience.isRecovering = false;
+  }
+}
+
+function setupNetworkResilience() {
+  if ('connection' in navigator && navigator.connection) {
+    const conn = navigator.connection;
+    const updateConn = () => {
+      state.networkResilience.effectiveType = conn.effectiveType || '4g';
+      state.networkResilience.downlink = conn.downlink || 10;
+      const statusEl = $('sidebar-network-status');
+      if (conn.effectiveType === '2g' || conn.effectiveType === 'slow-2g') {
+        state.audioEngine.quality = 'low';
+        if (statusEl) {
+          statusEl.innerHTML = '<span class="online-dot" style="background:#eab308;"></span> Adaptive Opus • 48–64kbps';
+        }
+      } else {
+        if (statusEl) {
+          statusEl.innerHTML = '<span class="online-dot"></span> Direct Opus • 160kbps';
+        }
+      }
+    };
+    conn.addEventListener('change', updateConn);
+    updateConn();
+  }
+
+  fetch('/api/health/cookies')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && $('label-cookie-health')) {
+        const score = data.health_score ?? (data.status === 'healthy' ? 100 : 75);
+        $('label-cookie-health').textContent = `Session Shield: ${score}% (${data.status})`;
+      }
+    })
+    .catch(() => {});
+}
+
 
 // ============================================================================
 // Authentication & User Presets
@@ -636,6 +828,7 @@ async function initApp() {
   initPWA();
   initAudioSuiteUI();
   initSubsonicUI();
+  setupNetworkResilience();
 
   // Initialize IndexedDB Offline Storage & Synchronize User Library
   OfflineDB.init().catch(console.warn);
@@ -1469,6 +1662,15 @@ async function playTrack(track, options = { startRadio: true }) {
 
   // Load lyrics asynchronously
   fetchLyrics(track);
+
+  // Auto-fetch SponsorBlock skip segments for music skits & intros
+  if (track.id && String(track.id).length === 11) {
+    fetchTrackSponsorBlock(track.id);
+  } else {
+    state.sponsorblock.segments = [];
+    state.sponsorblock.skippedSegments = new Set();
+    state.sponsorblock.bypassedStarts = new Set();
+  }
 
   // Fetch automix recommendations in the background seeded by track and artist
   if (options.startRadio) {
@@ -4842,17 +5044,37 @@ function setupAudioListeners() {
   });
   audio.addEventListener('error', () => {
     if (isYTActive) return;
-    if (state.currentTrack && state.currentTrack.id && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-      console.info('[Failover] Native stream unavailable; seamlessly switching to YouTube player engine.');
-      isYTActive = true;
-      ytPlayer.loadVideoById(state.currentTrack.id);
-      ytPlayer.playVideo();
-      updatePlayPauseIcons(true);
-      startYTProgressTracker();
-      return;
+    if (state.currentTrack && state.currentTrack.id) {
+      if (!state.networkResilience.isRecovering) {
+        console.warn('[Stream Error] Attempting CDN token refresh & byte resumption...');
+        triggerStreamRecovery(audio.currentTime || 0);
+        return;
+      }
+      if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+        console.info('[Failover] Native stream unavailable; seamlessly switching to YouTube player engine.');
+        isYTActive = true;
+        ytPlayer.loadVideoById(state.currentTrack.id);
+        ytPlayer.playVideo();
+        updatePlayPauseIcons(true);
+        startYTProgressTracker();
+        return;
+      }
     }
     updatePlayPauseIcons(false);
     state.isPlaying = false;
+  });
+
+  audio.addEventListener('stalled', () => {
+    if (isYTActive || !state.isPlaying) return;
+    if (state.currentTrack && state.currentTrack.id && !state.networkResilience.isRecovering) {
+      clearTimeout(state.networkResilience.recoveryTimeout);
+      state.networkResilience.recoveryTimeout = setTimeout(() => {
+        if (state.isPlaying && audio.readyState < 3 && !state.networkResilience.isRecovering) {
+          console.warn('[Stream Stalled] Triggering proactive token refresh...');
+          triggerStreamRecovery(audio.currentTime || 0);
+        }
+      }, 3500);
+    }
   });
 }
 
@@ -5745,6 +5967,8 @@ function setupEventListeners() {
   $('btn-neu-timer')?.addEventListener('click', () => openSleepTimerModal());
   $('btn-neu-eq')?.addEventListener('click', () => openEqualizerModal());
   $('cinema-btn-eq')?.addEventListener('click', () => openEqualizerModal());
+  $('btn-neu-sponsorblock')?.addEventListener('click', () => toggleSponsorBlock());
+  $('btn-sb-undo')?.addEventListener('click', () => revertSponsorBlockSkip());
 
   // Equalizer Modal Controls
   $('btn-close-equalizer')?.addEventListener('click', closeEqualizerModal);
