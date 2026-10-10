@@ -3504,8 +3504,8 @@ function generateFallbackCover(title, artist) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
     <defs>
       <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#3f56f6"/>
-        <stop offset="100%" stop-color="#14151c"/>
+        <stop offset="0%" stop-color="#10b981"/>
+        <stop offset="100%" stop-color="#05070c"/>
       </linearGradient>
     </defs>
     <rect width="300" height="300" fill="url(#grad)"/>
@@ -4273,9 +4273,9 @@ function startSpectrumVisualizer() {
       gradient.addColorStop(0.65, '#84a98c');
       gradient.addColorStop(1, '#a3b18a');
     } else {
-      gradient.addColorStop(0, '#6366f1');
-      gradient.addColorStop(0.5, '#06b6d4');
-      gradient.addColorStop(1, '#10b981');
+      gradient.addColorStop(0, '#10b981');
+      gradient.addColorStop(0.5, '#34d399');
+      gradient.addColorStop(1, '#6ee7b7');
     }
 
     for (let i = 0; i < barCount; i++) {
