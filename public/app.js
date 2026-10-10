@@ -508,6 +508,10 @@ function handleAuthFormSubmit() {
 // Theme Management & Dynamic Toasts
 // ============================================================================
 function initTheme() {
+  if (!localStorage.getItem('songbuddy_theme_v2')) {
+    localStorage.setItem('songbuddy_theme', 'dark');
+    localStorage.setItem('songbuddy_theme_v2', 'true');
+  }
   const savedTheme = localStorage.getItem('songbuddy_theme') || 'dark';
   setTheme(savedTheme, false);
 }
