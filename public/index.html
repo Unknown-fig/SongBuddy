@@ -902,23 +902,73 @@
         </div>
       </div>
 
-      <!-- VIEW CONTAINER: LIBRARY / FAVOURITES -->
+      <!-- VIEW CONTAINER: LIBRARY / MULTI-LAYER MANAGEMENT -->
       <div id="view-library" class="view-panel">
         <div class="library-hero-banner">
-          <div class="library-heart-box">
+          <div class="library-heart-box" id="library-hero-icon">
             <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
             </svg>
           </div>
           <div class="library-hero-text">
-            <span class="hero-tag">COLLECTION</span>
-            <h2 class="library-heading">Liked Songs</h2>
-            <p class="library-count" id="liked-count-display">0 songs saved</p>
+            <span class="hero-tag" id="library-hero-tag">PERSONAL COLLECTION</span>
+            <h2 class="library-heading" id="library-heading-title">Liked Songs</h2>
+            <p class="library-count" id="liked-count-display">0 tracks saved</p>
+          </div>
+          <div class="library-hero-actions">
+            <button type="button" class="lib-action-btn" id="btn-export-m3u" title="Export as M3U Playlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Export M3U</span>
+            </button>
+            <button type="button" class="lib-action-btn" id="btn-import-m3u" title="Import M3U / PLS Playlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Import M3U</span>
+            </button>
+            <button type="button" class="lib-action-btn" id="btn-view-stats" title="View Listening Analytics & Stats">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+              <span>Listening Stats</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Library Navigation Sub-Tabs -->
+        <div class="library-tabs-nav">
+          <button type="button" class="lib-tab-btn active" data-tab="favourites" id="tab-lib-favs">Favourites</button>
+          <button type="button" class="lib-tab-btn" data-tab="recent" id="tab-lib-recent">Recently Played</button>
+          <button type="button" class="lib-tab-btn" data-tab="most-played" id="tab-lib-most">Most Played</button>
+          <button type="button" class="lib-tab-btn" data-tab="local" id="tab-lib-local">Local Audio &amp; ID3</button>
+        </div>
+
+        <!-- Local Music Dropzone Container (shown when Local tab is selected) -->
+        <div class="local-dropzone-container hidden" id="local-dropzone-container">
+          <div class="local-dropzone" id="local-dropzone">
+            <div class="dropzone-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="36" height="36">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
+            <h4 class="dropzone-title">Drop Audio Files (MP3, FLAC, WAV, AAC, OGG)</h4>
+            <p class="dropzone-sub">Extracts ID3v2 tags, embedded album covers &amp; builds your offline library</p>
+            <button type="button" class="btn-browse-local" id="btn-browse-local">Browse Local Files</button>
           </div>
         </div>
 
         <div class="top-charts-list" id="liked-tracks-list">
-          <!-- Populated from LocalStorage -->
+          <!-- Populated dynamically based on active library tab -->
         </div>
       </div>
 
@@ -1014,8 +1064,8 @@
       <!-- Sunken Inset Scrubber Pill -->
       <div class="neu-scrubber-section">
         <div class="neu-time-row">
-          <span class="neu-time-text" id="scrub-current-time">01.38</span>
-          <span class="neu-time-text" id="scrub-total-time">03.06</span>
+          <span class="neu-time-text" id="scrub-current-time">00:00</span>
+          <span class="neu-time-text time-toggle-btn" id="scrub-total-time" title="Click to toggle Elapsed / Remaining time" style="cursor:pointer;">03:06</span>
         </div>
         <div class="neu-scrubber-groove" id="scrubber-track-container">
           <div class="neu-scrubber-fill" id="scrubber-played-bar"></div>
@@ -1025,19 +1075,19 @@
         </div>
       </div>
 
-      <!-- Sub Actions Row: Speed, Timer, EQ, Share & Heart -->
+      <!-- Sub Actions Row: Speed, Timer, EQ, Share, Heart, Cast & Shortcuts -->
       <div class="neu-sub-row">
         <button class="neu-sub-btn neu-speed-btn" id="btn-neu-speed" title="Change Playback Speed (Current: 1.0x)" aria-label="Playback Speed">
           <span class="speed-badge-text" id="speed-badge-text">1.0x</span>
         </button>
-        <button class="neu-sub-btn" id="btn-neu-timer" title="Set Sleep Timer" aria-label="Sleep Timer">
+        <button class="neu-sub-btn" id="btn-neu-timer" title="Set Sleep Timer (T)" aria-label="Sleep Timer">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
           <span class="timer-active-indicator hidden" id="timer-active-indicator"></span>
         </button>
-        <button class="neu-sub-btn" id="btn-neu-eq" title="Open Studio Equalizer &amp; Frequency Visualizer" aria-label="Open Equalizer">
+        <button class="neu-sub-btn" id="btn-neu-eq" title="Open Studio Equalizer, DSP &amp; FX (E)" aria-label="Open Equalizer">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
             <line x1="4" y1="21" x2="4" y2="14"></line>
             <line x1="4" y1="10" x2="4" y2="3"></line>
@@ -1048,6 +1098,12 @@
             <circle cx="4" cy="12" r="2"></circle>
             <circle cx="12" cy="10" r="2"></circle>
             <circle cx="20" cy="14" r="2"></circle>
+          </svg>
+        </button>
+        <button class="neu-sub-btn" id="btn-neu-cast" title="Wireless Stream / Cast (AirPlay, DLNA, Cast)" aria-label="Wireless Cast">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+            <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"></path>
+            <line x1="2" y1="20" x2="2.01" y2="20" stroke-width="3"></line>
           </svg>
         </button>
         <button class="neu-sub-btn" id="btn-neu-share" title="Share Track">
@@ -1062,18 +1118,22 @@
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
           </svg>
         </button>
+        <button class="neu-sub-btn" id="btn-neu-shortcuts" title="Keyboard Shortcuts (?)" aria-label="Shortcuts">
+          <span style="font-weight:700;font-size:12px;font-family:var(--font-mono, monospace);">?</span>
+        </button>
       </div>
 
       <!-- Concentric Tactile Playback Controls -->
       <div class="neu-controls-row">
-        <!-- Repeat -->
-        <button class="neu-ctrl-btn neu-btn-repeat" id="btn-ctrl-repeat" title="Repeat Track">
+        <!-- Repeat (3-State: Off / All / 1) -->
+        <button class="neu-ctrl-btn neu-btn-repeat" id="btn-ctrl-repeat" title="Repeat Mode (R): Cycle Off / All / 1" style="position:relative;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
             <polyline points="17 1 21 5 17 9"></polyline>
             <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
             <polyline points="7 23 3 19 7 15"></polyline>
             <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
           </svg>
+          <span class="repeat-mode-badge hidden" id="repeat-mode-badge">1</span>
         </button>
 
         <!-- Previous (Concentric Circle) -->
@@ -1101,6 +1161,15 @@
           </div>
         </button>
 
+        <!-- Stop Transport Button -->
+        <button class="neu-ctrl-btn neu-btn-stop" id="btn-ctrl-stop" title="Stop Playback &amp; Reset" aria-label="Stop Playback">
+          <div class="neu-ctrl-inner">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            </svg>
+          </div>
+        </button>
+
         <!-- Next (Concentric Circle) -->
         <button class="neu-ctrl-btn neu-btn-next" id="btn-ctrl-next" title="Next Track (Ctrl + N)" aria-keyshortcuts="Control+N">
           <div class="neu-ctrl-inner">
@@ -1112,7 +1181,7 @@
         </button>
 
         <!-- Shuffle / Automix -->
-        <button class="neu-ctrl-btn neu-btn-shuffle" id="btn-ctrl-shuffle" title="Continuous Automix">
+        <button class="neu-ctrl-btn neu-btn-shuffle" id="btn-ctrl-shuffle" title="Continuous Automix / Shuffle (S)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
             <polyline points="16 3 21 3 21 8"></polyline>
             <line x1="4" y1="20" x2="21" y2="3"></line>
@@ -1378,7 +1447,18 @@
           <h3 class="lyrics-track-title" id="lyrics-track-title">Butterfly Effect</h3>
           <p class="lyrics-track-artist" id="lyrics-track-artist">Travis Scott</p>
         </div>
-        <button class="close-overlay-btn" id="btn-close-lyrics-overlay">&times;</button>
+        <div class="lyrics-header-actions" style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="lyrics-action-btn" id="btn-load-custom-lrc" title="Load Custom LRC File">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Import LRC</span>
+          </button>
+          <input type="file" id="lrc-file-input" accept=".lrc,.txt" style="display:none;">
+          <button class="close-overlay-btn" id="btn-close-lyrics-overlay">&times;</button>
+        </div>
       </div>
       <div class="lyrics-scroll-body" id="lyrics-scroll-body">
         <div class="lyrics-lines-wrapper" id="lyrics-lines-wrapper">
@@ -1450,6 +1530,14 @@
           </div>
         </div>
         <div class="queue-header-actions">
+          <button type="button" class="btn-clear-queue" id="btn-queue-export-m3u" title="Export Queue as M3U">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Export M3U</span>
+          </button>
           <label class="queue-autoplay-toggle" title="Autoplay similar songs continuously when queue ends">
             <input type="checkbox" id="queue-autoplay-switch" checked>
             <span class="queue-autoplay-slider"></span>
@@ -1805,6 +1893,68 @@
         </div>
       </div>
 
+      <!-- Advanced DSP & Sound Tuning Suite -->
+      <div class="eq-dsp-suite">
+        <div class="dsp-grid">
+          <!-- Preamp Gain -->
+          <div class="dsp-card">
+            <div class="dsp-card-header">
+              <span class="dsp-title">Preamp Gain</span>
+              <span class="dsp-val-badge" id="eq-preamp-val">0.0 dB</span>
+            </div>
+            <input type="range" class="dsp-range-slider" id="eq-preamp-slider" min="-12" max="12" step="0.5" value="0">
+            <span class="dsp-hint">Pre-EQ signal attenuation &amp; boost</span>
+          </div>
+
+          <!-- Stereo Spatial Enhancer -->
+          <div class="dsp-card">
+            <div class="dsp-card-header">
+              <span class="dsp-title">Stereo Spatial Pan</span>
+              <span class="dsp-val-badge" id="eq-spatial-val">Center</span>
+            </div>
+            <input type="range" class="dsp-range-slider" id="eq-spatial-slider" min="-1" max="1" step="0.05" value="0">
+            <span class="dsp-hint">3D acoustic field &amp; stereo expansion</span>
+          </div>
+
+          <!-- Crossfade Transition -->
+          <div class="dsp-card">
+            <div class="dsp-card-header">
+              <span class="dsp-title">Crossfade Transition</span>
+              <span class="dsp-val-badge" id="crossfade-val">Off</span>
+            </div>
+            <div class="crossfade-pills-row" id="crossfade-pills-row">
+              <button type="button" class="dsp-pill active" data-crossfade="0">Off</button>
+              <button type="button" class="dsp-pill" data-crossfade="3">3s</button>
+              <button type="button" class="dsp-pill" data-crossfade="5">5s</button>
+              <button type="button" class="dsp-pill" data-crossfade="8">8s</button>
+              <button type="button" class="dsp-pill" data-crossfade="12">12s</button>
+            </div>
+            <span class="dsp-hint">Smooth gapless crossfade between tracks</span>
+          </div>
+
+          <!-- Volume Normalization & Bit-Perfect Toggles -->
+          <div class="dsp-card dsp-toggles-card">
+            <label class="dsp-toggle-row" title="Equalizes song loudness via ReplayGain compressor">
+              <div class="dsp-toggle-info">
+                <span class="dsp-toggle-label">Volume Normalization</span>
+                <span class="dsp-toggle-sub">ReplayGain loudness matching</span>
+              </div>
+              <input type="checkbox" id="eq-normalization-toggle" class="dsp-switch-input">
+              <span class="dsp-switch-slider"></span>
+            </label>
+
+            <label class="dsp-toggle-row" title="Direct raw DAC stream bypassing all DSP filters">
+              <div class="dsp-toggle-info">
+                <span class="dsp-toggle-label">Bit-Perfect Audiophile Mode</span>
+                <span class="dsp-toggle-sub">Bypass DSP &amp; stream pure bitstream</span>
+              </div>
+              <input type="checkbox" id="eq-audiophile-toggle" class="dsp-switch-input">
+              <span class="dsp-switch-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <!-- Equalizer Footer -->
       <div class="equalizer-footer">
         <button type="button" class="eq-btn-reset" id="btn-eq-reset">Reset to Flat</button>
@@ -1954,10 +2104,89 @@
     </div>
   </div>
 
+  <!-- Hidden File Input for M3U / PLS Playlists -->
+  <input type="file" id="m3u-file-input" accept=".m3u,.m3u8,.pls" style="display:none;">
+
+  <!-- ====================================================================
+       KEYBOARD SHORTCUTS MODAL
+       ==================================================================== -->
+  <div id="shortcuts-modal" class="shortcuts-modal hidden" aria-modal="true" role="dialog" aria-label="Keyboard Shortcuts">
+    <div class="shortcuts-backdrop" id="shortcuts-backdrop"></div>
+    <div class="shortcuts-card">
+      <div class="shortcuts-header">
+        <div class="shortcuts-header-title">
+          <span class="shortcuts-icon">⌨️</span>
+          <div>
+            <h3 class="shortcuts-title">Keyboard Shortcuts</h3>
+            <p class="shortcuts-sub">Studio transport &amp; rapid controls</p>
+          </div>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-shortcuts">&times;</button>
+      </div>
+      <div class="shortcuts-grid">
+        <div class="shortcut-item"><span class="shortcut-key">Space / P</span><span class="shortcut-desc">Play / Pause</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">Ctrl + N / N</span><span class="shortcut-desc">Next Track</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">Ctrl + B / B</span><span class="shortcut-desc">Previous Track</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">← / →</span><span class="shortcut-desc">Seek ±5 seconds</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">J / L</span><span class="shortcut-desc">Seek ±10 seconds</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">↑ / ↓</span><span class="shortcut-desc">Volume Up / Down</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">M</span><span class="shortcut-desc">Mute / Unmute</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">S</span><span class="shortcut-desc">Toggle Shuffle</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">R</span><span class="shortcut-desc">Cycle Repeat (Off / All / 1)</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">Q</span><span class="shortcut-desc">Toggle Play Queue</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">L</span><span class="shortcut-desc">Toggle Synced Lyrics</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">E</span><span class="shortcut-desc">Toggle Equalizer &amp; DSP</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">T</span><span class="shortcut-desc">Toggle Sleep Timer</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">F</span><span class="shortcut-desc">Toggle TV Cinema Ambilight</span></div>
+        <div class="shortcut-item"><span class="shortcut-key">?</span><span class="shortcut-desc">Shortcuts Cheat-Sheet</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       LISTENING STATS & SCROBBLER MODAL
+       ==================================================================== -->
+  <div id="stats-modal" class="stats-modal hidden" aria-modal="true" role="dialog" aria-label="Listening Statistics">
+    <div class="stats-backdrop" id="stats-backdrop"></div>
+    <div class="stats-card">
+      <div class="stats-header">
+        <div class="stats-header-title">
+          <span class="stats-icon">📊</span>
+          <div>
+            <h3 class="stats-title">Listening Analytics &amp; Scrobbler</h3>
+            <p class="stats-sub">Streaming telemetry, play counts &amp; history</p>
+          </div>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-stats">&times;</button>
+      </div>
+      <div class="stats-summary-grid">
+        <div class="stat-pill-card">
+          <span class="stat-num" id="stat-tracks-played">0</span>
+          <span class="stat-label">Tracks Played</span>
+        </div>
+        <div class="stat-pill-card">
+          <span class="stat-num" id="stat-minutes-listened">0 min</span>
+          <span class="stat-label">Total Time</span>
+        </div>
+        <div class="stat-pill-card">
+          <span class="stat-num" id="stat-top-artist">None</span>
+          <span class="stat-label">Top Artist</span>
+        </div>
+      </div>
+      <div class="stats-top-tracks-header">
+        <h4 class="stats-section-title">Most Scrobbled Songs</h4>
+        <button type="button" class="btn-export-stats" id="btn-export-stats-json">Export JSON</button>
+      </div>
+      <div class="stats-top-list" id="stats-top-list">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
   <!-- YouTube IFrame API -->
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=50"></script>
+  <script src="app.js?v=52"></script>
 </body>
 </html>
