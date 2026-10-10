@@ -4,6 +4,7 @@ import re
 import ssl
 import json
 import time
+import io
 import psutil
 import urllib.parse
 import threading
@@ -148,6 +149,7 @@ STREAM_CACHE = BoundedLRUCache(capacity=200, default_ttl=4 * 3600)   # 4h TTL
 RADIO_CACHE = BoundedLRUCache(capacity=100, default_ttl=2 * 3600)    # 2h TTL
 SEARCH_CACHE = BoundedLRUCache(capacity=200, default_ttl=3600)       # 1h TTL
 LYRICS_CACHE = BoundedLRUCache(capacity=500, default_ttl=24 * 3600)  # 24h TTL
+THUMB_COLOR_CACHE = BoundedLRUCache(capacity=300, default_ttl=24 * 3600)  # 24h TTL
 HTTP_SESSION = requests.Session()
 HTTP_SESSION.headers.update({"User-Agent": USER_AGENT})
 
@@ -1024,6 +1026,75 @@ def fetch_lyrics(track_title: str, artist_name: str, duration: Optional[float] =
     LYRICS_CACHE.set(cache_key, empty_result)
     return empty_result
 
+def extract_thumbnail_color(video_id: str, thumb_url: Optional[str] = None) -> Dict[str, Any]:
+    """Extracts dominant vibrant accent RGB from track thumbnail using Pillow."""
+    cached = THUMB_COLOR_CACHE.get(video_id)
+    if cached:
+        return cached
+
+    url = thumb_url or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+    try:
+        from PIL import Image
+        req_headers = {"User-Agent": USER_AGENT}
+        resp = requests.get(url, headers=req_headers, timeout=(3.0, 5.0))
+        if resp.status_code != 200 and "hqdefault" not in url:
+            url = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+            resp = requests.get(url, headers=req_headers, timeout=(3.0, 5.0))
+
+        if resp.status_code == 200:
+            img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+            w, h = img.size
+            if "ytimg.com" in url or "youtube.com" in url:
+                img = img.crop((0, int(h * 0.125), w, int(h * 0.875)))
+
+            img = img.resize((32, 32), Image.Resampling.LANCZOS)
+            pixels = list(img.getdata())
+
+            best = None
+            max_score = -1.0
+            r_sum = g_sum = b_sum = count = 0
+
+            for r, g, b in pixels:
+                delta = max(r, g, b) - min(r, g, b)
+                sum_val = r + g + b
+                r_sum += r
+                g_sum += g
+                b_sum += b
+                count += 1
+                if 40 < sum_val < 720 and delta > 18:
+                    score = delta * (1.0 + max(r, g, b) / 255.0)
+                    if score > max_score:
+                        max_score = score
+                        best = (r, g, b)
+
+            if not best and count > 0:
+                best = (int(r_sum / count), int(g_sum / count), int(b_sum / count))
+
+            if not best:
+                best = (255, 255, 255)
+
+            r, g, b = best
+            if (r + g + b) < 90:
+                boost = 110.0 / max(1.0, float(r + g + b))
+                r = min(255, int(r * boost))
+                g = min(255, int(g * boost))
+                b = min(255, int(b * boost))
+
+            result = {
+                "r": r,
+                "g": g,
+                "b": b,
+                "hex": f"#{r:02x}{g:02x}{b:02x}"
+            }
+            THUMB_COLOR_CACHE.set(video_id, result)
+            return result
+    except Exception as e:
+        logger.warning(f"Thumbnail color extraction error for {video_id}: {e}")
+
+    default_color = {"r": 255, "g": 255, "b": 255, "hex": "#ffffff"}
+    THUMB_COLOR_CACHE.set(video_id, default_color)
+    return default_color
+
 # System Health & Metrics Collection (Phase 1, Step 1.2)
 def get_system_metrics() -> Dict[str, Any]:
     """Collect comprehensive system health and resource metrics."""
@@ -1443,6 +1514,21 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Lyrics resolution failure for '{title}': {e}")
                 self.send_json_error(500, "Lyrics retrieval failure.")
+            return
+
+        # 4b. API: Dynamic Thumbnail Accent Color Probe
+        elif path == "/api/thumb_color":
+            vid = params.get("id", [""])[0]
+            thumb = params.get("url", [""])[0]
+            try:
+                validator = VideoIDValidator(id=vid)
+                color = extract_thumbnail_color(validator.id, thumb or None)
+                self.send_json_response(color)
+            except ValidationError:
+                self.send_json_error(400, "Invalid YouTube video ID parameter format.")
+            except Exception as e:
+                logger.error(f"Thumb color failure for '{vid}': {e}")
+                self.send_json_error(500, "Color extraction error.")
             return
 
         # 5. API: Direct In-Memory Audio Streaming Proxy

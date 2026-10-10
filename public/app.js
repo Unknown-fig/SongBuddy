@@ -3644,21 +3644,45 @@ function fallbackColorFromTrack(track) {
   return VIBRANT_FALLBACK_PALETTES[idx];
 }
 
-function updateAmbientThumbnailColors(track) {
-  if (!track) return;
-  const fallback = fallbackColorFromTrack(track);
+const trackColorsCache = new Map();
 
-  // If no thumbnail or fallback cover, use curated vibrant palette immediately
-  if (!track.thumbnail) {
+function updateAmbientThumbnailColors(track) {
+  if (!track || !track.id) return;
+
+  // 1. Instant cache hit
+  if (trackColorsCache.has(track.id)) {
+    applyAmbientColors(trackColorsCache.get(track.id));
+    return;
+  }
+
+  const fallback = fallbackColorFromTrack(track);
+  let src = track.thumbnail;
+  if (src && src.includes('hq720.jpg')) {
+    src = src.replace('hq720.jpg', 'hqdefault.jpg');
+  }
+
+  // 2. Query backend PIL color extractor concurrently (100% bypasses CORS & letters letterbox bars)
+  if (track.id && !String(track.id).startsWith('local-')) {
+    const thumbParam = src ? `&url=${encodeURIComponent(src)}` : '';
+    fetch(`/api/thumb_color?id=${encodeURIComponent(track.id)}${thumbParam}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(serverColor => {
+        if (serverColor && !isNaN(serverColor.r)) {
+          trackColorsCache.set(track.id, serverColor);
+          if (state.currentTrack?.id === track.id) {
+            applyAmbientColors(serverColor);
+          }
+        }
+      })
+      .catch(() => {});
+  }
+
+  if (!src) {
     applyAmbientColors(fallback);
     return;
   }
 
-  let src = track.thumbnail;
-  if (src.includes('hq720.jpg')) {
-    src = src.replace('hq720.jpg', 'hqdefault.jpg');
-  }
-
+  // 3. Fast Client-side Canvas Extractor (runs in ~5ms)
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.src = src;
@@ -3667,12 +3691,21 @@ function updateAmbientThumbnailColors(track) {
     try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      const size = 28;
+      const size = 32;
       canvas.width = size;
       canvas.height = size;
-      ctx.drawImage(img, 0, 0, size, size);
-      const data = ctx.getImageData(0, 0, size, size).data;
 
+      // Crop out letterbox black bars if 4:3 YouTube thumbnail
+      const isYT = src.includes('ytimg.com') || src.includes('youtube.com');
+      if (isYT && img.naturalHeight > 0) {
+        const sy = Math.floor(img.naturalHeight * 0.125);
+        const sh = Math.floor(img.naturalHeight * 0.75);
+        ctx.drawImage(img, 0, sy, img.naturalWidth, sh, 0, 0, size, size);
+      } else {
+        ctx.drawImage(img, 0, 0, size, size);
+      }
+
+      const data = ctx.getImageData(0, 0, size, size).data;
       let bestColor = null;
       let maxScore = -1;
       let rSum = 0, gSum = 0, bSum = 0, count = 0;
@@ -3689,9 +3722,8 @@ function updateAmbientThumbnailColors(track) {
         const delta = max - min;
         const sum = r + g + b;
 
-        // Skip pitch black and washed out whites
-        if (sum > 60 && sum < 700 && delta > 25) {
-          // Score by saturation and brightness
+        // Score vibrant accents
+        if (sum > 35 && sum < 720 && delta > 18) {
           const score = delta * (1 + max / 255);
           if (score > maxScore) {
             maxScore = score;
@@ -3704,24 +3736,39 @@ function updateAmbientThumbnailColors(track) {
         count++;
       }
 
-      if (bestColor) {
-        applyAmbientColors(bestColor);
-      } else if (count > 0 && (rSum + gSum + bSum) / count > 80) {
-        applyAmbientColors({
-          r: Math.min(255, Math.round((rSum / count) * 1.2)),
-          g: Math.min(255, Math.round((gSum / count) * 1.2)),
-          b: Math.min(255, Math.round((bSum / count) * 1.2))
-        });
-      } else {
-        applyAmbientColors(fallback);
+      let chosen = bestColor;
+      if (!chosen && count > 0) {
+        chosen = {
+          r: Math.round(rSum / count),
+          g: Math.round(gSum / count),
+          b: Math.round(bSum / count)
+        };
+      }
+      if (!chosen) chosen = fallback;
+
+      // Ensure rich luminescence
+      if (chosen.r + chosen.g + chosen.b < 90) {
+        const boost = 110 / Math.max(1, chosen.r + chosen.g + chosen.b);
+        chosen = {
+          r: Math.min(255, Math.round(chosen.r * boost)),
+          g: Math.min(255, Math.round(chosen.g * boost)),
+          b: Math.min(255, Math.round(chosen.b * boost))
+        };
+      }
+
+      trackColorsCache.set(track.id, chosen);
+      if (state.currentTrack?.id === track.id) {
+        applyAmbientColors(chosen);
       }
     } catch (err) {
-      applyAmbientColors(fallback);
+      // Handled by server probe or fallback
     }
   };
 
   img.onerror = () => {
-    applyAmbientColors(fallback);
+    if (!trackColorsCache.has(track.id)) {
+      applyAmbientColors(fallback);
+    }
   };
 }
 
@@ -3732,20 +3779,57 @@ function applyAmbientColors(rgb) {
 
   root.style.setProperty('--ambient-rgb', rgbStr);
   root.style.setProperty('--ambient-beam', `rgb(${rgbStr})`);
-  root.style.setProperty('--ambient-glow', `rgba(${rgbStr}, 0.8)`);
-  root.style.setProperty('--ambient-soft', `rgba(${rgbStr}, 0.28)`);
-  root.style.setProperty('--ambient-bloom', `rgba(${rgbStr}, 0.12)`);
+  root.style.setProperty('--ambient-glow', `rgba(${rgbStr}, 0.85)`);
+  root.style.setProperty('--ambient-soft', `rgba(${rgbStr}, 0.35)`);
+  root.style.setProperty('--ambient-bloom', `rgba(${rgbStr}, 0.16)`);
 
-  // Update dynamic atmospheric aura
+  // Direct SVG update for screen ambilight perimeter roaming light
+  const screenAmbilight = $('screen-ambilight');
+  if (screenAmbilight) {
+    screenAmbilight.style.display = 'block';
+    screenAmbilight.style.opacity = state.isPlaying ? '0.85' : '0.4';
+  }
+
+  document.querySelectorAll('.ambilight-beam, .cinema-beam-ambient, .cinema-beam-glow').forEach(el => {
+    el.style.stroke = `rgb(${rgbStr})`;
+  });
+  document.querySelectorAll('.ambilight-beam-wide').forEach(el => {
+    el.style.stroke = `rgb(${rgbStr})`;
+  });
+  document.querySelectorAll('.ambilight-track, .cinema-beam-track').forEach(el => {
+    el.style.stroke = `rgba(${rgbStr}, 0.2)`;
+  });
+
+  // Update dynamic traveling bloom halo
+  const bloom = $('ambilight-bloom');
+  if (bloom) {
+    bloom.style.background = `radial-gradient(circle, rgba(${rgbStr}, 0.75) 0%, rgba(${rgbStr}, 0.25) 45%, transparent 72%)`;
+  }
+
+  // Update dynamic atmospheric aura behind main feed
   const glow = $('ambient-glow');
   if (glow) {
-    glow.style.background = `radial-gradient(circle, rgba(${rgbStr}, 0.22) 0%, rgba(${rgbStr}, 0.08) 45%, transparent 70%)`;
+    glow.style.background = `radial-gradient(circle, rgba(${rgbStr}, 0.24) 0%, rgba(${rgbStr}, 0.08) 45%, transparent 70%)`;
   }
 
   // Update cinema mode artwork backdrop glow
   const cinGlow = $('cinema-art-glow');
   if (cinGlow) {
-    cinGlow.style.background = `radial-gradient(circle, rgba(${rgbStr}, 0.75) 0%, rgba(${rgbStr}, 0.3) 50%, transparent 75%)`;
+    cinGlow.style.background = `radial-gradient(circle, rgba(${rgbStr}, 0.8) 0%, rgba(${rgbStr}, 0.32) 50%, transparent 75%)`;
+  }
+
+  // Update Right-Side Player Studio Disc Well Neuromorphic Border
+  const discWell = $('neu-disc-well');
+  if (discWell) {
+    discWell.style.borderColor = `rgba(${rgbStr}, 0.45)`;
+    discWell.style.boxShadow = `0 0 32px rgba(${rgbStr}, 0.3), inset 0 0 16px rgba(${rgbStr}, 0.18)`;
+  }
+
+  // Update Right-Side Player Studio Panel Border
+  const playerPanel = $('player-panel');
+  if (playerPanel) {
+    playerPanel.style.borderLeftColor = `rgba(${rgbStr}, 0.25)`;
+    playerPanel.style.boxShadow = `inset 1px 0 0 rgba(${rgbStr}, 0.12), -10px 0 40px rgba(0, 0, 0, 0.85)`;
   }
 }
 

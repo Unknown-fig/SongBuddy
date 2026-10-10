@@ -189,14 +189,14 @@ svg {
   pointer-events: none;
   z-index: 700;
   overflow: hidden;
-  opacity: 0;
-  display: none;
+  opacity: 0.85;
+  display: block;
   transition: opacity 0.5s ease;
 }
 
 body.tv-mode-active .screen-ambilight-wrapper {
   display: block;
-  opacity: 0.85;
+  opacity: 1;
 }
 
 .screen-ambilight-wrapper.paused {
@@ -212,30 +212,34 @@ body.tv-mode-active .screen-ambilight-wrapper {
 /* Subtle underlying perimeter rail */
 .ambilight-track {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.12);
+  stroke: rgba(var(--ambient-rgb, 255, 255, 255), 0.18);
   stroke-width: 1.5px;
+  transition: stroke 0.6s ease;
 }
 
 /* Wide diffused glow tail */
 .ambilight-beam-wide {
   fill: none;
-  stroke: #ffffff;
-  stroke-width: 6px;
+  stroke: var(--ambient-beam, #ffffff);
+  stroke-width: 8px;
   stroke-dasharray: 240 760;
   stroke-linecap: round;
   animation: roamSquare 5.5s linear infinite;
-  opacity: 0.35;
+  opacity: 0.45;
+  filter: drop-shadow(0 0 16px var(--ambient-beam, #ffffff));
+  transition: stroke 0.6s ease, filter 0.6s ease;
 }
 
 /* Primary intense colored laser */
 .ambilight-beam {
   fill: none;
-  stroke: #ffffff;
-  stroke-width: 3px;
+  stroke: var(--ambient-beam, #ffffff);
+  stroke-width: 3.5px;
   stroke-dasharray: 180 820;
   stroke-linecap: round;
   animation: roamSquare 5.5s linear infinite;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.7));
+  filter: drop-shadow(0 0 10px var(--ambient-beam, #ffffff)) drop-shadow(0 0 25px var(--ambient-glow, rgba(255, 255, 255, 0.7)));
+  transition: stroke 0.6s ease, filter 0.6s ease;
 }
 
 /* Ultra-bright white inner laser head */
@@ -255,11 +259,12 @@ body.tv-mode-active .screen-ambilight-wrapper {
   width: 380px;
   height: 380px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--ambient-glow, rgba(255, 255, 255, 0.7)) 0%, rgba(var(--ambient-rgb, 16, 185, 129), 0.25) 45%, transparent 72%);
+  background: radial-gradient(circle, var(--ambient-glow, rgba(255, 255, 255, 0.7)) 0%, rgba(var(--ambient-rgb, 255, 255, 255), 0.25) 45%, transparent 72%);
   filter: blur(48px);
   pointer-events: none;
   animation: roamBloomSquare 5.5s linear infinite;
-  opacity: 0.65;
+  opacity: 0.75;
+  transition: background 0.6s ease;
 }
 
 @keyframes roamSquare {
@@ -4106,15 +4111,16 @@ body.tv-mode-active .screen-ambilight-wrapper {
   background: rgba(0, 0, 0, 0.88);
   backdrop-filter: blur(32px) saturate(200%);
   -webkit-backdrop-filter: blur(32px) saturate(200%);
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 1px solid rgba(var(--ambient-rgb, 255, 255, 255), 0.2);
   display: flex;
   flex-direction: column;
   padding: 24px 22px 20px;
   height: 100vh;
   position: relative;
   overflow: hidden;
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03), -10px 0 40px rgba(0, 0, 0, 0.85);
+  box-shadow: inset 1px 0 0 rgba(var(--ambient-rgb, 255, 255, 255), 0.1), -10px 0 40px rgba(0, 0, 0, 0.85);
   user-select: none;
+  transition: border-color 0.6s ease, box-shadow 0.6s ease;
 }
 
 [data-theme="neumorphic"] .neu-player-panel {
@@ -4760,8 +4766,9 @@ body.tv-mode-active .screen-ambilight-wrapper {
 [data-theme="dark"] .neu-disc-well {
   background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.06) 0%, rgba(0, 0, 0, 0.35) 100%);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 4px 18px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.15), 0 10px 28px rgba(0, 0, 0, 0.4);
+  border: 1.5px solid rgba(var(--ambient-rgb, 255, 255, 255), 0.35);
+  box-shadow: inset 0 4px 18px rgba(0, 0, 0, 0.6), inset 0 0 15px rgba(var(--ambient-rgb, 255, 255, 255), 0.15), 0 0 28px var(--ambient-soft, rgba(255, 255, 255, 0.2)), 0 10px 28px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.6s ease, box-shadow 0.6s ease;
 }
 
 [data-theme="dark"] .neu-chip-btn {

@@ -94,6 +94,18 @@ def test_radio_endpoint(client):
         assert "artist" in data[0]
 
 @pytest.mark.integration
+def test_thumb_color_endpoint(client):
+    """Test /api/thumb_color endpoint extracting RGB accent color"""
+    client.request("GET", "/api/thumb_color?id=4NRXx6U8ABQ")
+    response = client.getresponse()
+    assert response.status == 200
+    data = json.loads(response.read().decode("utf-8"))
+    assert "r" in data
+    assert "g" in data
+    assert "b" in data
+    assert "hex" in data
+
+@pytest.mark.integration
 def test_static_file_serving(client):
     """Test static file serving"""
     client.request("GET", "/")
