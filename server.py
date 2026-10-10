@@ -1048,7 +1048,7 @@ def extract_thumbnail_color(video_id: str, thumb_url: Optional[str] = None) -> D
                 img = img.crop((0, int(h * 0.125), w, int(h * 0.875)))
 
             img = img.resize((32, 32), Image.Resampling.LANCZOS)
-            pixels = list(img.getdata())
+            pixels = [img.getpixel((x, y)) for y in range(32) for x in range(32)]
 
             best = None
             max_score = -1.0
