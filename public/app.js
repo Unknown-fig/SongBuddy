@@ -409,7 +409,7 @@ function loginUser(userData, remember = true) {
   closeAuthModal();
   checkAuthState();
   closeUserDropdown();
-  showToastNotification(`Welcome back, ${userData.name}! 🎵`);
+  showToastNotification(`Welcome back, ${userData.name}!`);
 }
 
 function logoutUser() {
@@ -567,7 +567,7 @@ function setTheme(themeName, showToast = true) {
   }
 
   if (showToast) {
-    showToastNotification(themeName === 'neumorphic' ? '🌿 Neumorphic Sage Theme Activated' : '🌑 Obsidian Dark Theme Activated');
+    showToastNotification(themeName === 'neumorphic' ? 'Neumorphic Sage Theme Activated' : 'Obsidian Dark Theme Activated');
   }
 }
 
@@ -832,7 +832,7 @@ function addToQueue(track, silent = false) {
   renderQueueDrawer();
 
   if (!silent) {
-    showToastNotification(`Added "${trackObj.title}" to queue 🎵`);
+    showToastNotification(`Added "${trackObj.title}" to queue`);
   }
 }
 
@@ -860,7 +860,7 @@ function removeFromRadioQueue(index) {
     const removed = state.radioQueue.splice(index, 1)[0];
     updateQueueBadge();
     renderQueueDrawer();
-    showToastNotification(`Removed "${removed?.title || 'track'}" from recommendations 🗑️`);
+    showToastNotification(`Removed "${removed?.title || 'track'}" from recommendations`);
   }
 }
 
@@ -869,7 +869,7 @@ function clearRadioQueue() {
   state.radioQueue = [];
   updateQueueBadge();
   renderQueueDrawer();
-  showToastNotification('Auto recommendations cleared 🗑️');
+  showToastNotification('Auto recommendations cleared');
 }
 
 function playQueuedTrack(index) {
@@ -944,7 +944,7 @@ function openMobileSearch(initialQuery = '') {
       input.value = initialQuery;
       searchMobileMusic(initialQuery);
     } else if (!input.value.trim()) {
-      renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits (Tap to play)');
+      renderMobileSearchResults(HERO_SLIDES, 'Trending Hits (Tap to play)');
     }
     setTimeout(() => input.focus(), 150);
   }
@@ -978,12 +978,12 @@ async function searchMobileMusic(query) {
       .then(r => r.json())
       .then(trending => {
         if (Array.isArray(trending) && trending.length) {
-          renderMobileSearchResults(trending, '🔥 Popular Recommendations & Hits');
+          renderMobileSearchResults(trending, 'Popular Recommendations & Hits');
         } else {
-          renderMobileSearchResults(HERO_SLIDES, '🔥 Popular Recommendations & Hits');
+          renderMobileSearchResults(HERO_SLIDES, 'Popular Recommendations & Hits');
         }
       })
-      .catch(() => renderMobileSearchResults(HERO_SLIDES, '🔥 Popular Recommendations & Hits'));
+      .catch(() => renderMobileSearchResults(HERO_SLIDES, 'Popular Recommendations & Hits'));
     return;
   }
 
@@ -993,7 +993,7 @@ async function searchMobileMusic(query) {
     resultsEl.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:32px 16px;color:#94a3b8;font-weight:600;">
         <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>
-        <span>Searching all tracks & artists... 🎵</span>
+        <span>Searching all tracks & artists...</span>
       </div>`;
   }
 
@@ -1028,12 +1028,12 @@ async function searchMobileMusic(query) {
       .then(r => r.json())
       .then(trending => {
         if (Array.isArray(trending) && trending.length) {
-          renderMobileSearchResults(trending, '🔥 Trending Hits:');
+          renderMobileSearchResults(trending, 'Trending Hits:');
         } else {
-          renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits:');
+          renderMobileSearchResults(HERO_SLIDES, 'Trending Hits:');
         }
       })
-      .catch(() => renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits:'));
+      .catch(() => renderMobileSearchResults(HERO_SLIDES, 'Trending Hits:'));
   }
 }
 
@@ -1066,7 +1066,7 @@ function renderMobileSearchResults(tracks, label) {
     row.addEventListener('click', () => {
       playTrack(track);
       closeMobileSearch();
-      showToastNotification(`Playing: ${track.title} 🎵`);
+      showToastNotification(`Playing: ${track.title}`);
     });
     resultsEl.appendChild(row);
   });
@@ -1077,7 +1077,7 @@ function playRadioTrack(index) {
     const track = state.radioQueue.splice(index, 1)[0];
     renderQueueDrawer();
     playTrack(track, { startRadio: true });
-    showToastNotification(`Playing: ${track.title} 🎵`);
+    showToastNotification(`Playing: ${track.title}`);
   }
 }
 
@@ -1200,7 +1200,7 @@ function renderQueueDrawer() {
             state.queue.splice(toIdx, 0, moved);
             saveQueueToStorage();
             renderQueueUI();
-            showToastNotification(`Moved "${moved.title}" in queue ↕️`);
+            showToastNotification(`Moved "${moved.title}" in queue`);
           }
         });
 
@@ -1674,7 +1674,7 @@ function playNextTrack(isManual = false) {
     renderQueueDrawer();
     if (next) {
       playTrack(next, { startRadio: false });
-      showToastNotification(`Playing from queue: ${next.title} 🎵`);
+      showToastNotification(`Playing from queue: ${next.title}`);
     }
     return;
   }
@@ -1698,7 +1698,7 @@ function playNextTrack(isManual = false) {
 
     if (nextTrack) {
       playTrack(nextTrack, { startRadio: true });
-      showToastNotification(`Autoplaying recommendation: ${nextTrack.title} 📻`);
+      showToastNotification(`Autoplaying recommendation: ${nextTrack.title}`);
       return;
     }
   }
@@ -1902,7 +1902,7 @@ async function fetchLyrics(track) {
   }
 
   if ($('mini-lyrics-current')) $('mini-lyrics-current').textContent = 'Fetching synchronized lyrics...';
-  if ($('mini-lyrics-next')) $('mini-lyrics-next').textContent = '♫ Direct Audio Opus Stream';
+  if ($('mini-lyrics-next')) $('mini-lyrics-next').textContent = 'Direct Audio Opus Stream';
 
   // 3. Fast Server Call without strict duration constraint
   try {
@@ -1924,7 +1924,7 @@ async function fetchLyrics(track) {
         state.lyrics.plain = data.plainLyrics;
         renderPlainLyrics();
         if ($('mini-lyrics-current')) $('mini-lyrics-current').textContent = 'Tap to view song lyrics';
-        if ($('mini-lyrics-next')) $('mini-lyrics-next').textContent = '♫ Direct Audio Opus Stream';
+        if ($('mini-lyrics-next')) $('mini-lyrics-next').textContent = 'Direct Audio Opus Stream';
       } else {
         if (wrapper) wrapper.innerHTML = `<p class="lyric-line">No synchronized lyrics found for this track.</p>`;
         if ($('mini-lyrics-current')) $('mini-lyrics-current').textContent = 'Instrumental or plain playback';
@@ -2015,7 +2015,7 @@ function updateLyricsSync(currentTime) {
     }
     if (miniNext) {
       const nextLine = state.lyrics.synced[activeIdx + 1];
-      miniNext.textContent = nextLine ? `"${nextLine.text}"` : '♫ Direct Audio Opus Stream';
+      miniNext.textContent = nextLine ? `"${nextLine.text}"` : 'Direct Audio Opus Stream';
     }
 
     const overlay = $('lyrics-overlay');
@@ -2211,7 +2211,7 @@ function handleNavigationClick(view) {
     case 'home':
       switchView('home');
       $('main-feed')?.scrollTo({ top: 0, behavior: 'smooth' });
-      showToastNotification('Explore Home Feed 🎵');
+      showToastNotification('Explore Home Feed');
       break;
 
     case 'genres':
@@ -2222,7 +2222,7 @@ function handleNavigationClick(view) {
           grid.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, 80);
-      showToastNotification('Explore Genres & Moods 🎧');
+      showToastNotification('Explore Genres & Moods');
       break;
 
     case 'albums':
@@ -2235,7 +2235,7 @@ function handleNavigationClick(view) {
       const albumQuery = 'Top Trending Albums';
       if ($('search-input')) $('search-input').value = albumQuery;
       handleSearch(albumQuery);
-      showToastNotification('Browsing Trending Albums 💿');
+      showToastNotification('Browsing Trending Albums');
       break;
 
     case 'artists':
@@ -2246,7 +2246,7 @@ function handleNavigationClick(view) {
           row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, 80);
-      showToastNotification('Discover Top Artists ⭐');
+      showToastNotification('Discover Top Artists');
       break;
 
     case 'radio':
@@ -2260,17 +2260,17 @@ function handleNavigationClick(view) {
           loadRadioQueue(HERO_SLIDES[1].id, HERO_SLIDES[1].artist);
         }
       }
-      showToastNotification('Continuous Radio Station 📻');
+      showToastNotification('Continuous Radio Station');
       break;
 
     case 'recent':
       switchView('library', 'recent');
-      showToastNotification('Recently Played Songs 🕒');
+      showToastNotification('Recently Played Songs');
       break;
 
     case 'favourites':
       switchView('library', 'favourites');
-      showToastNotification('Your Liked Songs ❤️');
+      showToastNotification('Your Liked Songs');
       break;
 
     case 'queue':
@@ -2499,7 +2499,7 @@ const OfflineDB = {
         const store = tx.objectStore('offline_tracks');
         store.put(item);
         tx.oncomplete = () => {
-          showToastNotification(`"${track.title}" saved offline! 🎧`);
+          showToastNotification(`"${track.title}" saved offline!`);
           if (state.activeLibraryTab === 'offline') renderOfflineTracks();
           resolve(true);
         };
@@ -2613,8 +2613,8 @@ function renderCustomPlaylistsShelf() {
       <span class="custom-pl-title">${escapeHTML(pl.name)}</span>
       <span class="custom-pl-sub">${count} tracks • ${escapeHTML(pl.description || 'Personal Mix')}</span>
       <div class="custom-pl-actions">
-        <button type="button" class="btn-custom-pl-play" title="Play Playlist">▶ Play</button>
-        <button type="button" class="btn-custom-pl-del" title="Delete Playlist">✕</button>
+        <button type="button" class="btn-custom-pl-play" title="Play Playlist">Play</button>
+        <button type="button" class="btn-custom-pl-del" title="Delete Playlist">&times;</button>
       </div>
     `;
 
@@ -2714,7 +2714,7 @@ async function renderOfflineTracks() {
     container.innerHTML = `
       <div style="text-align:center; padding: 48px 16px; color: var(--text-secondary);">
         <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">No offline songs downloaded</p>
-        <p style="font-size: 0.88rem; opacity: 0.8;">Click the download icon (⬇) on any track row to save it directly into device IndexedDB storage for offline playback!</p>
+        <p style="font-size: 0.88rem; opacity: 0.8;">Click the download icon on any track row to save it directly into device IndexedDB storage for offline playback!</p>
       </div>
     `;
     return;
@@ -2819,7 +2819,7 @@ async function handleImportPlaylistSubmit() {
       msg.className = 'import-status-message success';
     }
 
-    showToastNotification(`Imported ${tracks.length} tracks from ${data.source.toUpperCase()}! 🎶`);
+    showToastNotification(`Imported ${tracks.length} tracks from ${data.source.toUpperCase()}!`);
     setTimeout(() => {
       closeImportPlaylistModal();
       switchLibraryTab('custom');
@@ -2992,7 +2992,7 @@ function renderMostPlayedTracks() {
       <span class="chart-rank">${String(index + 1).padStart(2, '0')}</span>
       <div class="chart-track-info">
         <span class="chart-track-name">${escapeHTML(track.title)}</span>
-        <span class="chart-track-artist">${escapeHTML(track.artist)} • 🔥 ${track.playCount} plays</span>
+        <span class="chart-track-artist">${escapeHTML(track.artist)} • ${track.playCount} plays</span>
       </div>
       <button class="neu-card-play-btn" style="position:static;opacity:1;transform:none;" title="Search and play">
         <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
@@ -3203,11 +3203,11 @@ function parseFilenameFallback(fileName) {
 async function handleLocalAudioFiles(fileList) {
   const files = Array.from(fileList || []).filter(f => f.type.startsWith('audio/') || /\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(f.name));
   if (files.length === 0) {
-    showToastNotification('Please select valid audio files (.mp3, .flac, .wav, .aac, .ogg) ⚠️');
+    showToastNotification('Please select valid audio files (.mp3, .flac, .wav, .aac, .ogg)');
     return;
   }
 
-  showToastNotification(`Extracting ID3 tags from ${files.length} audio file(s)... ⏳`);
+  showToastNotification(`Extracting ID3 tags from ${files.length} audio file(s)...`);
 
   const parsedTracks = [];
   for (let i = 0; i < files.length; i++) {
@@ -3250,7 +3250,7 @@ async function handleLocalAudioFiles(fileList) {
     renderQueueDrawer();
   }
 
-  showToastNotification(`Successfully loaded ${parsedTracks.length} song(s) with embedded tags 📁`);
+  showToastNotification(`Successfully loaded ${parsedTracks.length} song(s) with embedded tags`);
 }
 
 // ============================================================================
@@ -3258,7 +3258,7 @@ async function handleLocalAudioFiles(fileList) {
 // ============================================================================
 function exportPlaylistToM3U(tracks, filename = 'SongBuddy_Playlist.m3u') {
   if (!tracks || tracks.length === 0) {
-    showToastNotification('No tracks to export in playlist 📁');
+    showToastNotification('No tracks to export in playlist');
     return;
   }
   let m3u = '#EXTM3U\n';
@@ -3277,7 +3277,7 @@ function exportPlaylistToM3U(tracks, filename = 'SongBuddy_Playlist.m3u') {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToastNotification(`Exported ${tracks.length} tracks as ${filename} 🎶`);
+  showToastNotification(`Exported ${tracks.length} tracks as ${filename}`);
 }
 
 function parseM3UPlaylistContent(content) {
@@ -3326,14 +3326,14 @@ function handleM3UFileUpload(file) {
     const content = e.target.result;
     const tracks = parseM3UPlaylistContent(content);
     if (tracks.length === 0) {
-      showToastNotification('Could not find valid audio entries in M3U file ⚠️');
+      showToastNotification('Could not find valid audio entries in M3U file');
       return;
     }
     tracks.forEach(t => state.queue.push(t));
     saveQueueToStorage();
     updateQueueBadge();
     renderQueueDrawer();
-    showToastNotification(`Imported ${tracks.length} song(s) from ${file.name} to Queue 📂`);
+    showToastNotification(`Imported ${tracks.length} song(s) from ${file.name} to Queue`);
   };
   reader.readAsText(file);
 }
@@ -3346,11 +3346,11 @@ function handleCustomLrcImport(file) {
     state.lyrics.synced = parseLrc(text);
     if (state.lyrics.synced && state.lyrics.synced.length > 0) {
       renderSyncedLyrics();
-      showToastNotification(`Imported ${state.lyrics.synced.length} synchronized lyric timestamps 📜`);
+      showToastNotification(`Imported ${state.lyrics.synced.length} synchronized lyric timestamps`);
     } else {
       state.lyrics.plain = text;
       renderPlainLyrics();
-      showToastNotification('Imported custom text lyrics 📜');
+      showToastNotification('Imported custom text lyrics');
     }
   };
   reader.readAsText(file);
@@ -3443,7 +3443,7 @@ function exportStatsJSON() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToastNotification('Exported listening telemetry JSON 📊');
+  showToastNotification('Exported listening telemetry JSON');
 }
 
 // ============================================================================
@@ -3463,7 +3463,7 @@ function stopPlayback() {
   if ('mediaSession' in navigator) {
     navigator.mediaSession.playbackState = 'none';
   }
-  showToastNotification('Playback Stopped ⏹️');
+  showToastNotification('Playback Stopped');
 }
 
 function cycleRepeatMode() {
@@ -3479,8 +3479,8 @@ function cycleRepeatMode() {
   updateRepeatUI();
 
   if (next === 'off') showToastNotification('Repeat: Off');
-  else if (next === 'all') showToastNotification('Repeat: Loop Queue / All Songs 🔁');
-  else if (next === 'one') showToastNotification('Repeat: Current Song (Repeat 1) 🔂');
+  else if (next === 'all') showToastNotification('Repeat: Loop Queue / All Songs');
+  else if (next === 'one') showToastNotification('Repeat: Current Song (Repeat 1)');
 }
 
 function updateRepeatUI() {
@@ -3510,7 +3510,7 @@ async function triggerWirelessCast() {
   if (audio && audio.remote && typeof audio.remote.prompt === 'function') {
     try {
       await audio.remote.prompt();
-      showToastNotification('Connected to Wireless Streaming Target 📡');
+      showToastNotification('Connected to Wireless Streaming Target');
       return;
     } catch (e) {
       console.log('Remote playback prompt cancelled or unsupported:', e);
@@ -3527,7 +3527,7 @@ async function triggerWirelessCast() {
       url: window.location.href
     }).catch(() => {});
   } else {
-    showToastNotification('AirPlay & Google Cast: Connect via browser Cast icon or Bluetooth 🎧');
+    showToastNotification('AirPlay & Google Cast: Connect via browser Cast icon or Bluetooth');
   }
 }
 
@@ -3544,7 +3544,7 @@ function createCustomPlaylist(name) {
   saved.push(name);
   localStorage.setItem('songbuddy_custom_playlists', JSON.stringify(saved));
   renderSidebarPlaylists();
-  showToastNotification(`Playlist "${name}" created! 🎵`);
+  showToastNotification(`Playlist "${name}" created!`);
 }
 
 function renderSidebarPlaylists() {
@@ -3569,7 +3569,7 @@ function renderSidebarPlaylists() {
     li.addEventListener('click', () => {
       if ($('search-input')) $('search-input').value = item.query;
       handleSearch(item.query);
-      showToastNotification(`Opening ${item.title} 🎧`);
+      showToastNotification(`Opening ${item.title}`);
     });
     list.appendChild(li);
   });
@@ -3582,7 +3582,7 @@ function renderSidebarPlaylists() {
     li.addEventListener('click', () => {
       if ($('search-input')) $('search-input').value = title;
       handleSearch(title);
-      showToastNotification(`Opening ${title} 🎧`);
+      showToastNotification(`Opening ${title}`);
     });
     list.appendChild(li);
   });
@@ -3861,7 +3861,7 @@ function openCinemaAmbilight(options = {}) {
   }
 
   if (options.showToast !== false) {
-    showToastNotification('TV Mode Activated 📺 (Press F or Esc to exit)');
+    showToastNotification('TV Mode Activated (Press F or Esc to exit)');
   }
 }
 
@@ -3957,7 +3957,7 @@ function toggleScreenOffMode() {
   updateScreenOffUI();
   if (state.screenOffPlayback) {
     if (state.isPlaying) enableBackgroundAudioSession();
-    showToastNotification('Screen-Off Playback: ON 🌙 (Music continues when phone is locked)');
+    showToastNotification('Screen-Off Playback: ON (Music continues when phone is locked)');
   } else {
     stopBackgroundAudioSession();
     showToastNotification('Screen-Off Playback: OFF (Music pauses on lock)');
@@ -3969,10 +3969,10 @@ function updateScreenOffUI() {
   const label = $('label-screenoff-status');
   if (btn) {
     btn.classList.toggle('active-mode', state.screenOffPlayback);
-    btn.title = `Screen-Off Playback: ${state.screenOffPlayback ? 'ON 🌙 (Plays while display is off)' : 'OFF'}`;
+    btn.title = `Screen-Off Playback: ${state.screenOffPlayback ? 'ON (Plays while display is off)' : 'OFF'}`;
   }
   if (label) {
-    label.textContent = `Screen-Off Audio: ${state.screenOffPlayback ? 'ON 🌙' : 'OFF'}`;
+    label.textContent = `Screen-Off Audio: ${state.screenOffPlayback ? 'ON' : 'OFF'}`;
   }
 }
 
@@ -4222,7 +4222,7 @@ function setEqualizerPreset(presetName) {
 
   updateEqualizerUI();
   applyEqualizerSettings();
-  showToastNotification(`EQ Preset: ${presetName.charAt(0).toUpperCase() + presetName.slice(1).replace('-', ' ')} 🎛️`);
+  showToastNotification(`EQ Preset: ${presetName.charAt(0).toUpperCase() + presetName.slice(1).replace('-', ' ')}`);
 }
 
 function setEqualizerBand(bandIndex, gainDb) {
@@ -4251,7 +4251,7 @@ function toggleEqualizerMaster(enabled) {
   if (checkbox) checkbox.checked = enabled;
   reconnectWebAudioChain();
   applyEqualizerSettings();
-  showToastNotification(enabled ? 'Equalizer Activated ⚡' : 'Equalizer Bypassed (Flat Audio)');
+  showToastNotification(enabled ? 'Equalizer Activated' : 'Equalizer Bypassed (Flat Audio)');
 }
 
 function setPreampGain(db) {
@@ -4290,7 +4290,7 @@ function setCrossfadeSeconds(sec) {
   });
   const valEl = $('crossfade-val');
   if (valEl) valEl.textContent = numSec === 0 ? 'Off' : `${numSec}s`;
-  showToastNotification(`Crossfade: ${numSec === 0 ? 'Off (Gapless)' : numSec + ' seconds'} 🎚️`);
+  showToastNotification(`Crossfade: ${numSec === 0 ? 'Off (Gapless)' : numSec + ' seconds'}`);
 }
 
 function toggleNormalization(enabled) {
@@ -4299,7 +4299,7 @@ function toggleNormalization(enabled) {
   const checkbox = $('eq-normalization-toggle');
   if (checkbox) checkbox.checked = enabled;
   reconnectWebAudioChain();
-  showToastNotification(enabled ? 'Volume Normalization (ReplayGain) Active 🔊' : 'Volume Normalization Bypassed');
+  showToastNotification(enabled ? 'Volume Normalization (ReplayGain) Active' : 'Volume Normalization Bypassed');
 }
 
 function toggleAudiophilePassthrough(enabled) {
@@ -4308,7 +4308,7 @@ function toggleAudiophilePassthrough(enabled) {
   const checkbox = $('eq-audiophile-toggle');
   if (checkbox) checkbox.checked = enabled;
   reconnectWebAudioChain();
-  showToastNotification(enabled ? 'Bit-Perfect Direct Passthrough Mode (Bypasses DSP) 🎵' : 'Audio DSP Chain Active');
+  showToastNotification(enabled ? 'Bit-Perfect Direct Passthrough Mode (Bypasses DSP)' : 'Audio DSP Chain Active');
 }
 
 function checkCrossfadeTrigger(currentTime, duration) {
@@ -4513,7 +4513,7 @@ function setPlaybackSpeed(speed) {
   });
 
   closePlaybackSpeedPopover();
-  showToastNotification(`Playback Speed: ${numSpeed}x ⚡`);
+  showToastNotification(`Playback Speed: ${numSpeed}x`);
 }
 
 function openPlaybackSpeedPopover(anchorEl) {
@@ -4566,7 +4566,7 @@ function setSleepTimer(option) {
       remainingSeconds: 0
     };
     updateSleepTimerBanner();
-    showToastNotification('Sleep Timer: Stops at end of current track 🌙');
+    showToastNotification('Sleep Timer: Stops at end of current track');
     closeSleepTimerModal();
     return;
   }
@@ -4582,7 +4582,7 @@ function setSleepTimer(option) {
   };
 
   updateSleepTimerBanner();
-  showToastNotification(`Sleep Timer set for ${minutes} minutes 🌙`);
+  showToastNotification(`Sleep Timer set for ${minutes} minutes`);
 
   sleepTimerTicker = setInterval(() => {
     if (!state.sleepTimer.active) {
@@ -4675,7 +4675,7 @@ function triggerSleepTimerExecution() {
       if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
         try { ytPlayer.setVolume(Math.floor(startVolume * 100)); } catch (e) {}
       }
-      showToastNotification('Sleep Timer: Music auto-paused. Good night! 🌙');
+      showToastNotification('Sleep Timer: Music auto-paused. Good night!');
     }
   }, fadeInterval);
 }
@@ -4786,7 +4786,7 @@ function setupEventListeners() {
     }
     updateQueueBadge();
     renderQueueUI();
-    showToastNotification(`Loaded ${tracks.length} local audio track(s) 📁`);
+    showToastNotification(`Loaded ${tracks.length} local audio track(s)`);
   });
 
   // Playlist Management
@@ -4912,10 +4912,10 @@ function setupEventListeners() {
       switchView('home');
       
       if (filter === 'trending') {
-        showToastNotification('Loading Trending Chart Hits 🔥');
+        showToastNotification('Loading Trending Chart Hits');
         quickPlaySpotifyCard('Top Trending Global & Indian Hits 2026', 'Trending Hits');
       } else if (filter === 'automix') {
-        showToastNotification('Continuous Automix Activated ⚡');
+        showToastNotification('Continuous Automix Activated');
         if (state.currentTrack) {
           state.radioEnabled = true;
           startRadioRecommendations(state.currentTrack);
@@ -4923,26 +4923,26 @@ function setupEventListeners() {
           quickPlaySpotifyCard('Continuous Electronic Chill Beats', 'Continuous Automix');
         }
       } else if (filter === 'lofi') {
-        showToastNotification('Lo-Fi & Chill Station 🌙');
+        showToastNotification('Lo-Fi & Chill Station');
         quickPlaySpotifyCard('Lo-Fi Hip Hop Study Chill Relax Beats', 'Lo-Fi & Chill');
       } else if (filter === 'hiphop') {
-        showToastNotification('Desi Hip Hop & Rap Drops 🚀');
+        showToastNotification('Desi Hip Hop & Rap Drops');
         quickPlaySpotifyCard('Best Hip Hop and Rap hits 2026', 'Hip-Hop Station');
       } else if (filter === 'punjabi') {
-        showToastNotification('Punjabi Wave Beats 💥');
+        showToastNotification('Punjabi Wave Beats');
         quickPlaySpotifyCard('Trending Punjabi wave hits Karan Aujla Diljit', 'Punjabi Wave');
       } else if (filter === 'bollywood') {
-        showToastNotification('Bollywood Classics & Retro 📻');
+        showToastNotification('Bollywood Classics & Retro');
         quickPlaySpotifyCard('Bollywood classic and retro hit songs', 'Bollywood Classics');
       } else {
-        showToastNotification('Personalized Flow Active ✨');
+        showToastNotification('Personalized Flow Active');
       }
     });
   });
 
   // Helper for 1-Click Instant Playback on Quick Cards & Station Cards
   async function quickPlaySpotifyCard(query, title) {
-    showToastNotification(`Playing ${title}... 🎧`);
+    showToastNotification(`Playing ${title}...`);
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=5`);
       if (!res.ok) throw new Error('Search failed');
@@ -5151,7 +5151,7 @@ function setupEventListeners() {
     // 2. Ctrl + N -> Next Track
     if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'n' || e.code === 'KeyN')) {
       e.preventDefault();
-      showToastNotification('Next Track ⏭ (Ctrl + N)');
+      showToastNotification('Next Track (Ctrl + N)');
       playNextTrack(true);
       return;
     }
@@ -5159,7 +5159,7 @@ function setupEventListeners() {
     // 3. Ctrl + B -> Back / Previous Track
     if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'b' || e.code === 'KeyB')) {
       e.preventDefault();
-      showToastNotification('Previous Track ⏮ (Ctrl + B)');
+      showToastNotification('Previous Track (Ctrl + B)');
       playPrevTrack();
       return;
     }
@@ -5199,7 +5199,7 @@ function setupEventListeners() {
         state.isShuffle = !state.isShuffle;
         $('btn-ctrl-shuffle')?.classList.toggle('active', state.isShuffle);
         $('cinema-btn-shuffle')?.classList.toggle('active', state.isShuffle);
-        showToastNotification(state.isShuffle ? 'Shuffle: On 🔀' : 'Shuffle: Off');
+        showToastNotification(state.isShuffle ? 'Shuffle: On' : 'Shuffle: Off');
         return;
       }
 
@@ -5251,14 +5251,14 @@ function setupEventListeners() {
         e.preventDefault();
         const cur = isYTActive && ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : (audio?.currentTime || 0);
         seekPlayerTo(Math.max(0, cur - 5));
-        showToastNotification('Seek -5s ⏪');
+        showToastNotification('Seek -5s');
         return;
       }
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         const cur = isYTActive && ytPlayer && typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : (audio?.currentTime || 0);
         seekPlayerTo(cur + 5);
-        showToastNotification('Seek +5s ⏩');
+        showToastNotification('Seek +5s');
         return;
       }
 
@@ -5269,7 +5269,7 @@ function setupEventListeners() {
         state.volume = newVol;
         if (audio) audio.volume = newVol;
         if ($('volume-slider')) $('volume-slider').value = newVol;
-        showToastNotification(`Volume: ${Math.round(newVol * 100)}% 🔊`);
+        showToastNotification(`Volume: ${Math.round(newVol * 100)}%`);
         return;
       }
       if (e.key === 'ArrowDown') {
@@ -5278,7 +5278,7 @@ function setupEventListeners() {
         state.volume = newVol;
         if (audio) audio.volume = newVol;
         if ($('volume-slider')) $('volume-slider').value = newVol;
-        showToastNotification(`Volume: ${Math.round(newVol * 100)}% 🔉`);
+        showToastNotification(`Volume: ${Math.round(newVol * 100)}%`);
         return;
       }
     }
@@ -5307,7 +5307,7 @@ function setupEventListeners() {
     state.isShuffle = !state.isShuffle;
     $('btn-ctrl-shuffle')?.classList.toggle('active', state.isShuffle);
     $('cinema-btn-shuffle')?.classList.toggle('active', state.isShuffle);
-    showToastNotification(state.isShuffle ? 'Shuffle: On 🔀' : 'Shuffle: Off');
+    showToastNotification(state.isShuffle ? 'Shuffle: On' : 'Shuffle: Off');
   });
 
   $('btn-ctrl-repeat')?.addEventListener('click', cycleRepeatMode);
@@ -5578,7 +5578,7 @@ function setupEventListeners() {
     if (!state.currentTrack) return;
     const skippedTitle = state.currentTrack.title;
     playNextTrack(true);
-    showToastNotification(`Skipped "${skippedTitle}" ⏭`);
+    showToastNotification(`Skipped "${skippedTitle}"`);
   });
 
   // Autoplay Switch in Queue Drawer
@@ -5588,7 +5588,7 @@ function setupEventListeners() {
     autoplaySwitch.addEventListener('change', (e) => {
       state.autoplay = e.target.checked;
       localStorage.setItem('songbuddy_autoplay', state.autoplay ? 'true' : 'false');
-      showToastNotification(`Autoplay ${state.autoplay ? 'Enabled 📻' : 'Disabled ⏸️'}`);
+      showToastNotification(`Autoplay ${state.autoplay ? 'Enabled' : 'Disabled'}`);
       renderQueueDrawer();
     });
   }
@@ -5613,7 +5613,7 @@ function setupEventListeners() {
     } else if (navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(`${shareData.text} • ${shareData.url}`);
-        showToastNotification('Track link copied to clipboard! 📋');
+        showToastNotification('Track link copied to clipboard!');
       } catch (e) {
         showToastNotification(`Shared: ${state.currentTrack.title}`);
       }
@@ -5685,7 +5685,7 @@ function setupEventListeners() {
         playTrack(HERO_SLIDES[0]);
       }
       openLyrics();
-      showToastNotification(`Now Playing: ${state.currentTrack ? state.currentTrack.title : 'Lyrics & Audio'} 🎵`);
+      showToastNotification(`Now Playing: ${state.currentTrack ? state.currentTrack.title : 'Lyrics & Audio'}`);
     }
   });
 
@@ -5706,7 +5706,7 @@ function setupEventListeners() {
     const feed = $('main-feed');
     if (feed) feed.scrollTo({ top: 0, behavior: 'smooth' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToastNotification('Exploring Home Feed 🏠');
+    showToastNotification('Exploring Home Feed');
   });
 
   // Mobile Header Search Button
@@ -5725,7 +5725,7 @@ function setupEventListeners() {
       input.focus();
     }
     $('mobile-search-clear')?.classList.add('hidden');
-    renderMobileSearchResults(HERO_SLIDES, '🔥 Trending Hits (Tap to play)');
+    renderMobileSearchResults(HERO_SLIDES, 'Trending Hits (Tap to play)');
   });
 
   $('mobile-search-input')?.addEventListener('input', (e) => {
@@ -5968,7 +5968,7 @@ function initPWA() {
                 if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
                   console.log('[SongBuddy PWA] New update ready; activating immediately.');
                   installingWorker.postMessage({ type: 'SKIP_WAITING' });
-                  showToastNotification('SongBuddy updated! Refreshing with latest features 🚀');
+                  showToastNotification('SongBuddy updated! Refreshing with latest features');
                   setTimeout(() => {
                     window.location.reload();
                   }, 1200);
