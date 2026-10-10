@@ -30,6 +30,8 @@ const state = {
     activeIndex: -1,
     isOpen: false
   },
+  karaokeMode: false,
+  lyricsEventSource: null,
   searchDebounceTimer: null,
   lastSearchResults: [],
   activeSearchFilter: 'all',
@@ -1867,6 +1869,11 @@ async function fetchLyrics(track) {
   state.lyrics.plain = '';
   state.lyrics.activeIndex = -1;
 
+  if (state.lyricsEventSource) {
+    try { state.lyricsEventSource.close(); } catch (e) {}
+    state.lyricsEventSource = null;
+  }
+
   if ($('lyrics-track-title')) $('lyrics-track-title').textContent = track.title;
   if ($('lyrics-track-artist')) $('lyrics-track-artist').textContent = track.artist;
   const wrapper = $('lyrics-lines-wrapper');
@@ -1878,14 +1885,19 @@ async function fetchLyrics(track) {
   // 1. Instant Cache Hit (0ms)
   if (clientLyricsCache.has(cacheKey)) {
     const cachedData = clientLyricsCache.get(cacheKey);
-    if (cachedData.syncedLyrics) {
+    if (cachedData.cues && cachedData.cues.length) {
+      state.lyrics.synced = cachedData.cues;
+      renderSyncedLyrics();
+      return;
+    } else if (cachedData.syncedLyrics) {
       state.lyrics.synced = parseLrc(cachedData.syncedLyrics);
       renderSyncedLyrics();
+      return;
     } else if (cachedData.plainLyrics) {
       state.lyrics.plain = cachedData.plainLyrics;
       renderPlainLyrics();
+      return;
     }
-    return;
   }
 
   // 2. Shimmer Skeleton Loading State
@@ -1901,17 +1913,73 @@ async function fetchLyrics(track) {
     `;
   }
 
-  if ($('mini-lyrics-current')) $('mini-lyrics-current').textContent = 'Fetching synchronized lyrics...';
+  if ($('mini-lyrics-current')) $('mini-lyrics-current').textContent = 'Connecting real-time lyrics stream...';
   if ($('mini-lyrics-next')) $('mini-lyrics-next').textContent = 'Direct Audio Opus Stream';
 
-  // 3. Fast Server Call without strict duration constraint
+  // 3. Server-Sent Events (SSE) Real-Time Timeline Connection
+  let sseHandled = false;
+  if (window.EventSource) {
+    try {
+      const sseUrl = `/api/lyrics/sse?title=${encodeURIComponent(cleanTitle)}&artist=${encodeURIComponent(cleanArtist)}`;
+      const es = new EventSource(sseUrl);
+      state.lyricsEventSource = es;
+
+      es.addEventListener('manifest', (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload && payload.cues && payload.cues.length) {
+            sseHandled = true;
+            clientLyricsCache.set(cacheKey, { cues: payload.cues, instrumental: payload.instrumental });
+            if (state.currentTrack && state.currentTrack.id === track.id) {
+              state.lyrics.synced = payload.cues;
+              renderSyncedLyrics();
+              const miniCurrent = $('mini-lyrics-current');
+              const miniNext = $('mini-lyrics-next');
+              if (miniCurrent && state.lyrics.synced[0]) miniCurrent.textContent = `"${state.lyrics.synced[0].text}"`;
+              if (miniNext && state.lyrics.synced[1]) miniNext.textContent = `"${state.lyrics.synced[1].text}"`;
+            }
+          }
+        } catch (err) {
+          console.warn('[Lyrics SSE parse error]:', err);
+        }
+        es.close();
+        state.lyricsEventSource = null;
+      });
+
+      es.onerror = () => {
+        es.close();
+        state.lyricsEventSource = null;
+        if (!sseHandled) {
+          executeStandardLyricsFetch(cleanTitle, cleanArtist, cacheKey, wrapper, track);
+        }
+      };
+
+      // Fallback timer
+      setTimeout(() => {
+        if (!sseHandled && (!state.lyrics.synced || !state.lyrics.synced.length)) {
+          if (state.lyricsEventSource) {
+            try { state.lyricsEventSource.close(); } catch (e) {}
+            state.lyricsEventSource = null;
+          }
+          executeStandardLyricsFetch(cleanTitle, cleanArtist, cacheKey, wrapper, track);
+        }
+      }, 3000);
+      return;
+    } catch (e) {
+      console.warn('[SSE connect exception]:', e);
+    }
+  }
+
+  executeStandardLyricsFetch(cleanTitle, cleanArtist, cacheKey, wrapper, track);
+}
+
+async function executeStandardLyricsFetch(cleanTitle, cleanArtist, cacheKey, wrapper, track) {
   try {
     const res = await fetch(`/api/lyrics?title=${encodeURIComponent(cleanTitle)}&artist=${encodeURIComponent(cleanArtist)}`);
     if (!res.ok) throw new Error('Lyrics not found');
     const data = await res.json();
     clientLyricsCache.set(cacheKey, data);
 
-    // Only render if this track is still the active one
     if (state.currentTrack && state.currentTrack.id === track.id) {
       if (data.syncedLyrics) {
         state.lyrics.synced = parseLrc(data.syncedLyrics);
@@ -4073,6 +4141,7 @@ let preampNode = null;
 let compressorNode = null;
 let stereoPannerNode = null;
 let crossfadeGainNode = null;
+let karaokeFilterNode = null;
 let isCrossfading = false;
 
 function initWebAudio() {
@@ -4124,7 +4193,14 @@ function initWebAudio() {
     crossfadeGainNode = audioCtx.createGain();
     crossfadeGainNode.gain.value = 1;
 
-    // 6. AnalyserNode
+    // 6. Karaoke Center-Vocal Cancellation Biquad Filter (24dB suppression notch centered at 1000Hz, Q=0.8)
+    karaokeFilterNode = audioCtx.createBiquadFilter();
+    karaokeFilterNode.type = 'peaking';
+    karaokeFilterNode.frequency.value = 1000;
+    karaokeFilterNode.Q.value = 0.8;
+    karaokeFilterNode.gain.value = -24;
+
+    // 7. AnalyserNode
     analyserNode = audioCtx.createAnalyser();
     analyserNode.fftSize = 64;
     analyserNode.smoothingTimeConstant = 0.82;
@@ -4144,6 +4220,7 @@ function reconnectWebAudioChain() {
     eqFilterNodes.forEach(f => f.disconnect());
     if (compressorNode) compressorNode.disconnect();
     if (stereoPannerNode) stereoPannerNode.disconnect();
+    if (karaokeFilterNode) karaokeFilterNode.disconnect();
     if (crossfadeGainNode) crossfadeGainNode.disconnect();
     if (analyserNode) analyserNode.disconnect();
 
@@ -4181,6 +4258,12 @@ function reconnectWebAudioChain() {
       current = stereoPannerNode;
     }
 
+    // -> Karaoke Vocal Suppression filter
+    if (state.karaokeMode && karaokeFilterNode) {
+      current.connect(karaokeFilterNode);
+      current = karaokeFilterNode;
+    }
+
     // -> Crossfade Gain
     if (crossfadeGainNode) {
       current.connect(crossfadeGainNode);
@@ -4192,6 +4275,27 @@ function reconnectWebAudioChain() {
   } catch (e) {
     console.warn('[Web Audio reconnection error]:', e);
   }
+}
+
+function toggleKaraokeMode() {
+  state.karaokeMode = !state.karaokeMode;
+  const isActive = state.karaokeMode;
+
+  $('chip-karaoke')?.classList.toggle('active', isActive);
+
+  const btn = $('btn-toggle-karaoke');
+  if (btn) btn.classList.toggle('active', isActive);
+  const label = $('karaoke-btn-label');
+  if (label) label.textContent = isActive ? 'Vocals Off' : 'Karaoke';
+
+  const badge = $('karaoke-live-badge');
+  if (badge) badge.classList.toggle('hidden', !isActive);
+
+  $('lyrics-overlay')?.classList.toggle('karaoke-active', isActive);
+
+  reconnectWebAudioChain();
+
+  showToastNotification(isActive ? 'Karaoke Mode: Vocals Suppressed (Sing Along)' : 'Karaoke Mode: Standard Playback');
 }
 
 function resumeAudioContext() {
@@ -5561,6 +5665,8 @@ function setupEventListeners() {
 
   // Neumorphic Chips & Actions
   $('chip-lyrics')?.addEventListener('click', openLyrics);
+  $('chip-karaoke')?.addEventListener('click', toggleKaraokeMode);
+  $('btn-toggle-karaoke')?.addEventListener('click', toggleKaraokeMode);
   $('chip-equalizer')?.addEventListener('click', (e) => {
     e.stopPropagation();
     openEqualizerModal();

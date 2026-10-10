@@ -269,6 +269,46 @@ def get_track_context_explanation(artist: str, title: str) -> str:
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
 
+@mcp.tool()
+def get_realtime_lyrics_stream(title: str, artist: str) -> str:
+    """
+    Real-Time Timeline & Lyrics Synchronization:
+    Fetches millisecond-accurate timestamped cues and lyrics timeline for a track.
+    Provides line duration and syllable markers to eliminate lyric drift for AI performers and karaoke engines.
+    """
+    try:
+        from server import fetch_lyrics, parse_lrc_to_cues
+        lyrics_data = fetch_lyrics(title, artist)
+        cues = parse_lrc_to_cues(lyrics_data.get("syncedLyrics"))
+        
+        return json.dumps({
+            "status": "success",
+            "track": title,
+            "artist": artist,
+            "instrumental": lyrics_data.get("instrumental", False),
+            "synced_available": len(cues) > 0,
+            "total_cues": len(cues),
+            "intro_duration_seconds": cues[0]["time"] if cues else 0.0,
+            "timeline_cues": cues
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"status": "error", "message": f"Real-time lyrics stream failed: {str(e)}"})
+
+@mcp.tool()
+def analyze_karaoke_readiness(title: str, artist: str) -> str:
+    """
+    Dynamic Instrumental & Karaoke Analysis:
+    Evaluates vocal presence, center-channel frequency distribution, intro countdown duration,
+    and vocal cancellation parameters to prepare an optimal sing-along performance.
+    """
+    try:
+        from server import analyze_karaoke_profile
+        profile = analyze_karaoke_profile(title, artist)
+        return json.dumps(profile, indent=2)
+    except Exception as e:
+        return json.dumps({"status": "error", "message": f"Karaoke analysis failed: {str(e)}"})
+
 if __name__ == "__main__":
     # Runs the MCP server over standard stdio for agents
     mcp.run()
+

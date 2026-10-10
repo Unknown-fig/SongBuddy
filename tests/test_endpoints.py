@@ -7,37 +7,7 @@ import json
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 
-_test_server = None
-
-def is_port_in_use(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-@pytest.fixture(scope="session", autouse=True)
-def ensure_server_running():
-    global _test_server
-    os.environ["ENVIRONMENT"] = "test"
-    if not is_port_in_use(8000):
-        try:
-            from server import SongBuddyHandler
-            _test_server = ThreadingHTTPServer(("127.0.0.1", 8000), SongBuddyHandler)
-            thread = threading.Thread(target=_test_server.serve_forever, daemon=True)
-            thread.start()
-            time.sleep(0.4)
-        except Exception as e:
-            pytest.skip(f"Could not bind test server to port 8000: {e}")
-    yield
-    if _test_server:
-        try:
-            _test_server.shutdown()
-            _test_server.server_close()
-        except Exception:
-            pass
-
-@pytest.fixture
-def client():
-    """Fixture for HTTP client"""
-    return HTTPConnection("127.0.0.1", 8000, timeout=10)
+# Server fixtures are provided globally in conftest.py
 
 @pytest.mark.integration
 def test_health_endpoint(client):

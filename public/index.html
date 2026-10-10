@@ -1078,6 +1078,13 @@
               <circle cx="18" cy="16" r="3"></circle>
             </svg>
           </button>
+          <button class="neu-chip-btn chip-karaoke" id="chip-karaoke" title="Toggle Karaoke Vocal Suppression Mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -1470,10 +1477,21 @@
     <div class="lyrics-overlay-card">
       <div class="lyrics-overlay-header">
         <div class="lyrics-meta">
-          <h3 class="lyrics-track-title" id="lyrics-track-title">Butterfly Effect</h3>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <h3 class="lyrics-track-title" id="lyrics-track-title">Butterfly Effect</h3>
+            <span class="karaoke-live-badge hidden" id="karaoke-live-badge">Karaoke Active</span>
+          </div>
           <p class="lyrics-track-artist" id="lyrics-track-artist">Travis Scott</p>
         </div>
         <div class="lyrics-header-actions" style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="lyrics-action-btn karaoke-toggle-btn" id="btn-toggle-karaoke" title="Toggle Karaoke Vocal Suppression Mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+            <span id="karaoke-btn-label">Karaoke</span>
+          </button>
           <button type="button" class="lyrics-action-btn" id="btn-load-custom-lrc" title="Load Custom LRC File">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
