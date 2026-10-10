@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="neumorphic">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -26,6 +26,13 @@
 <body>
   <!-- Atmospheric Dynamic Background Aura -->
   <div class="ambient-glow" id="ambient-glow"></div>
+  <!-- Living Glassmorphic Aurora Mesh Canvas -->
+  <div class="ambient-aurora-mesh" id="ambient-aurora-mesh" aria-hidden="true">
+    <div class="aurora-orb aurora-orb-1"></div>
+    <div class="aurora-orb aurora-orb-2"></div>
+    <div class="aurora-orb aurora-orb-3"></div>
+    <div class="aurora-orb aurora-orb-4"></div>
+  </div>
 
   <!-- Screen Perimeter Ambilight (Laser Beam Roaming in a Square) -->
   <div class="screen-ambilight-wrapper" id="screen-ambilight" aria-hidden="true">
@@ -227,15 +234,16 @@
       <!-- Sticky Top Navigation Bar -->
       <header class="top-nav-bar" id="top-nav-bar">
         <div class="top-nav-left">
-          <!-- Circular Home Button (Exact Spotify Style) -->
-          <button class="spotify-top-home-btn" id="btn-top-home" title="Home" aria-label="Home">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-              <path d="M12.5 3.247a1 1 0 0 0-1 0L4 7.577V20h4.5v-6a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v6H20V7.577l-7.5-4.33z"></path>
+          <!-- SongBuddy Home Button -->
+          <button class="songbuddy-nav-home-btn active" id="btn-top-home" title="Explore Feed" aria-label="Home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="18" height="18">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
             </svg>
           </button>
         </div>
 
-        <!-- Search Bar with Spotify Pill Styling -->
+        <!-- Search Bar -->
         <div class="search-box-wrapper" id="search-box-wrapper">
           <button type="button" class="search-box-submit-btn" id="search-submit-btn" title="Search" aria-label="Search">
             <svg class="search-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -247,7 +255,7 @@
             type="search"
             id="search-input"
             class="search-box-input"
-            placeholder="What do you want to play?"
+            placeholder="Search songs, artists, playlists, or paste YouTube link..."
             autocomplete="off"
             autocorrect="off"
             autocapitalize="none"
@@ -272,9 +280,19 @@
           </button>
         </div>
 
-        <!-- Right User Actions + Explore Premium -->
+        <!-- Right User Actions + Studio Hi-Fi Badge -->
         <div class="top-user-actions">
-          <button class="spotify-premium-pill-btn" id="btn-explore-premium">Explore Premium</button>
+          <button class="songbuddy-studio-badge" id="btn-studio-eq-top" title="Open 5-Band Studio Equalizer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
+              <line x1="4" y1="21" x2="4" y2="14"></line>
+              <line x1="4" y1="10" x2="4" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12" y2="3"></line>
+              <line x1="20" y1="21" x2="20" y2="16"></line>
+              <line x1="20" y1="12" x2="20" y2="3"></line>
+            </svg>
+            <span>Studio Hi-Fi</span>
+          </button>
           <button class="action-btn theme-toggle-btn" id="btn-theme-toggle" title="Switch Theme (Neumorphic Sage / Obsidian Dark)">
             <svg id="theme-icon-sage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
               <path d="M12 3a9 9 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
@@ -367,323 +385,455 @@
               </div>
             </div>
           </div>
-        </div>
       </header>
 
-      <!-- VIEW CONTAINER: HOME / SPOTIFY FEED -->
-      <div id="view-home" class="view-panel active spotify-feed-container">
-        <!-- Top Atmospheric Filter Pills -->
-        <div class="spotify-feed-filters" id="spotify-feed-filters">
-          <button class="spotify-feed-pill active" data-feed-filter="all">All</button>
-          <button class="spotify-feed-pill" data-feed-filter="music">Music</button>
-          <button class="spotify-feed-pill" data-feed-filter="podcasts">Podcasts</button>
+      <!-- VIEW CONTAINER: HOME / SONGBUDDY STUDIO FEED -->
+      <div id="view-home" class="view-panel active songbuddy-feed-container">
+        <!-- Top Atmospheric Sound Capsule Filters -->
+        <div class="songbuddy-feed-filters" id="spotify-feed-filters">
+          <button class="songbuddy-feed-pill active" data-feed-filter="all">✨ For You</button>
+          <button class="songbuddy-feed-pill" data-feed-filter="trending">🔥 Trending Hits</button>
+          <button class="songbuddy-feed-pill" data-feed-filter="automix">⚡ Continuous Automix</button>
+          <button class="songbuddy-feed-pill" data-feed-filter="lofi">🌙 Lo-Fi &amp; Chill</button>
+          <button class="songbuddy-feed-pill" data-feed-filter="hiphop">🚀 Hip-Hop &amp; Rap</button>
+          <button class="songbuddy-feed-pill" data-feed-filter="punjabi">💥 Punjabi Wave</button>
+          <button class="songbuddy-feed-pill" data-feed-filter="bollywood">📻 Bollywood Classics</button>
         </div>
 
-        <!-- 2x4 Quick Play Cards Grid (8 Cards) -->
-        <div class="spotify-quick-grid" id="spotify-quick-grid">
-          <!-- Card 1 -->
-          <div class="spotify-quick-card" data-query="Daily Mix 1 Punjabi Bollywood hits" data-title="Daily Mix 1">
-            <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/daily_mix_1.svg?v=v2_authentic" alt="Daily Mix 1" class="quick-card-img" loading="eager">
+        <!-- Studio Spotlight Hero Banner -->
+        <div class="songbuddy-hero-banner" id="getting-started-card">
+          <div class="hero-banner-glass">
+            <div class="hero-left-col">
+              <div class="hero-tag-row">
+                <span class="hero-tag-pill">
+                  <span class="hero-live-dot"></span>
+                  HIGH-FIDELITY AUTOMIX ENGINE
+                </span>
+                <div class="hero-nav-arrows">
+                  <button class="hero-arrow-btn" id="btn-getting-started-prev" title="Previous station highlight" aria-label="Previous station highlight">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                  <button class="hero-arrow-btn" id="btn-getting-started-next" title="Next station highlight" aria-label="Next station highlight">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <h2 class="hero-main-title" id="getting-started-title">Continuous Audio Workstation</h2>
+              <p class="hero-main-desc" id="getting-started-desc">
+                Lossless in-memory bitstream buffering with continuous YouTube Automix, 5-band graphic equalizer, synced lyrics, and dynamic ambilight.
+              </p>
+
+              <div class="hero-actions-row">
+                <button class="hero-btn-primary" id="btn-browse-videos">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                    <polygon points="6 4 20 12 6 20 6 4"></polygon>
+                  </svg>
+                  <span>Start Flow Radio</span>
+                </button>
+                <button class="hero-btn-secondary" id="btn-hero-equalizer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+                    <line x1="4" y1="21" x2="4" y2="14"></line>
+                    <line x1="4" y1="10" x2="4" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12" y2="3"></line>
+                    <line x1="20" y1="21" x2="20" y2="16"></line>
+                    <line x1="20" y1="12" x2="20" y2="3"></line>
+                  </svg>
+                  <span>Studio Equalizer</span>
+                </button>
+                <button class="hero-btn-tv" id="btn-hero-tv" title="Enter TV Mode Fullscreen (F)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                  <span>TV Mode [F]</span>
+                </button>
+                <button class="hero-link-more" id="btn-show-tips">Explore features &rarr;</button>
+              </div>
             </div>
-            <span class="quick-card-title">Daily Mix 1</span>
-            <button class="quick-card-play-btn" title="Play Daily Mix 1" aria-label="Play Daily Mix 1">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+
+            <div class="hero-right-col">
+              <div class="hero-visualizer-orb" id="getting-started-disc" title="Click to launch Cinema Ambilight">
+                <div class="hero-visualizer-glow"></div>
+                <div class="hero-wave-bars">
+                  <span class="hw-bar hw-1"></span>
+                  <span class="hw-bar hw-2"></span>
+                  <span class="hw-bar hw-3"></span>
+                  <span class="hw-bar hw-4"></span>
+                  <span class="hw-bar hw-5"></span>
+                  <span class="hw-bar hw-6"></span>
+                  <span class="hw-bar hw-7"></span>
+                  <span class="hw-bar hw-8"></span>
+                </div>
+                <div class="hero-play-icon-glow">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
+                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                  </svg>
+                </div>
+                <span class="hero-wave-caption">Live Bitstream Engine</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Quick Flow Jump-In Tiles -->
+        <div class="songbuddy-section-header">
+          <div class="section-title-wrap">
+            <span class="section-eyebrow">QUICK FLOW</span>
+            <h2 class="section-headline">Instant Stations</h2>
+          </div>
+        </div>
+
+        <div class="songbuddy-quick-grid" id="spotify-quick-grid">
+          <!-- Card 1 -->
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="Top Trending Global hits 2026" data-title="Top Chart Hits">
+            <div class="quick-card-cover-wrap">
+              <img src="/assets/spotify_covers/daily_mix_1.svg?v=v3_studio" alt="Top Chart Hits" class="quick-card-img" loading="eager">
+            </div>
+            <div class="quick-card-body">
+              <span class="quick-card-title">Top Chart Hits</span>
+              <span class="quick-card-sub">Global &amp; Regional</span>
+            </div>
+            <button class="quick-card-play-btn" title="Play Top Chart Hits" aria-label="Play Top Chart Hits">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
 
           <!-- Card 2 -->
-          <div class="spotify-quick-card" data-query="Mtv Hustle 5 All Songs Episodes" data-title="Mtv Hustle 5 ~ All Songs ~ All Episodes">
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="Mtv Hustle 5 All Songs Episodes" data-title="MTV Hustle Underground">
             <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/mtv_hustle_5.svg?v=v2_authentic" alt="Mtv Hustle 5" class="quick-card-img" loading="eager">
+              <img src="/assets/spotify_covers/mtv_hustle_5.svg?v=v3_studio" alt="MTV Hustle" class="quick-card-img" loading="eager">
             </div>
-            <span class="quick-card-title">Mtv Hustle 5 ~ All Songs ~ All Episodes</span>
-            <button class="quick-card-play-btn" title="Play Mtv Hustle 5" aria-label="Play Mtv Hustle 5">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <div class="quick-card-body">
+              <span class="quick-card-title">MTV Hustle 05</span>
+              <span class="quick-card-sub">All Episodes &amp; Rap</span>
+            </div>
+            <button class="quick-card-play-btn" title="Play MTV Hustle" aria-label="Play MTV Hustle">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
 
           <!-- Card 3 -->
-          <div class="spotify-quick-card" data-query="Seedhe Maut top tracks" data-title="Seedhe Maut">
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="Seedhe Maut top tracks" data-title="Seedhe Maut &amp; DHH">
             <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/seedhe_maut.svg?v=v2_authentic" alt="Seedhe Maut" class="quick-card-img" loading="eager">
+              <img src="/assets/spotify_covers/seedhe_maut.svg?v=v3_studio" alt="Seedhe Maut" class="quick-card-img" loading="eager">
             </div>
-            <span class="quick-card-title">Seedhe Maut</span>
+            <div class="quick-card-body">
+              <span class="quick-card-title">Seedhe Maut &amp; DHH</span>
+              <span class="quick-card-sub">Lunch Boy &amp; Desi Hip Hop</span>
+            </div>
             <button class="quick-card-play-btn" title="Play Seedhe Maut" aria-label="Play Seedhe Maut">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
 
           <!-- Card 4 -->
-          <div class="spotify-quick-card" data-query="Discover Weekly trending indie hits" data-title="Discover Weekly">
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="Discover Weekly trending indie hits" data-title="Indie Wave Radar">
             <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/discover_weekly.svg?v=v2_authentic" alt="Discover Weekly" class="quick-card-img" loading="eager">
+              <img src="/assets/spotify_covers/discover_weekly.svg?v=v3_studio" alt="Indie Wave Radar" class="quick-card-img" loading="eager">
             </div>
-            <span class="quick-card-title">Discover Weekly</span>
-            <button class="quick-card-play-btn" title="Play Discover Weekly" aria-label="Play Discover Weekly">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <div class="quick-card-body">
+              <span class="quick-card-title">Indie Wave Radar</span>
+              <span class="quick-card-sub">Curated Independent Artists</span>
+            </div>
+            <button class="quick-card-play-btn" title="Play Indie Wave Radar" aria-label="Play Indie Wave Radar">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
 
           <!-- Card 5 -->
-          <div class="spotify-quick-card" data-query="Dhurandhar 2 All Song OST" data-title="Dhurandhar 2 All Song">
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="Dhurandhar 2 All Song OST" data-title="Dhurandhar Soundtracks">
             <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/dhurandhar_2.svg?v=v2_authentic" alt="Dhurandhar 2 All Song" class="quick-card-img" loading="eager">
+              <img src="/assets/spotify_covers/dhurandhar_2.svg?v=v3_studio" alt="Dhurandhar Soundtracks" class="quick-card-img" loading="eager">
             </div>
-            <span class="quick-card-title">Dhurandhar 2 All Song</span>
-            <button class="quick-card-play-btn" title="Play Dhurandhar 2 All Song" aria-label="Play Dhurandhar 2 All Song">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <div class="quick-card-body">
+              <span class="quick-card-title">Dhurandhar OST</span>
+              <span class="quick-card-sub">High-Octane Cinematic OST</span>
+            </div>
+            <button class="quick-card-play-btn" title="Play Dhurandhar Soundtracks" aria-label="Play Dhurandhar Soundtracks">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
 
           <!-- Card 6 -->
-          <div class="spotify-quick-card" data-query="New Music Friday India hits" data-title="New Music Friday India">
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="New Music Friday India hits" data-title="Fresh Radar India">
             <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/new_music_friday.svg?v=v2_authentic" alt="New Music Friday India" class="quick-card-img" loading="eager">
+              <img src="/assets/spotify_covers/new_music_friday.svg?v=v3_studio" alt="Fresh Radar India" class="quick-card-img" loading="eager">
             </div>
-            <span class="quick-card-title">New Music Friday India</span>
-            <button class="quick-card-play-btn" title="Play New Music Friday India" aria-label="Play New Music Friday India">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <div class="quick-card-body">
+              <span class="quick-card-title">Fresh Radar India</span>
+              <span class="quick-card-sub">Brand New Friday Drops</span>
+            </div>
+            <button class="quick-card-play-btn" title="Play Fresh Radar India" aria-label="Play Fresh Radar India">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
 
           <!-- Card 7 -->
-          <div class="spotify-quick-card" data-query="Trending Now Punjabi top hits" data-title="Trending Now Punjabi">
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="Trending Now Punjabi top hits" data-title="Punjabi Wave">
             <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/trending_punjabi.svg?v=v2_authentic" alt="Trending Now Punjabi" class="quick-card-img" loading="eager">
+              <img src="/assets/spotify_covers/trending_punjabi.svg?v=v3_studio" alt="Punjabi Wave" class="quick-card-img" loading="eager">
             </div>
-            <span class="quick-card-title">Trending Now Punjabi</span>
-            <button class="quick-card-play-btn" title="Play Trending Now Punjabi" aria-label="Play Trending Now Punjabi">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <div class="quick-card-body">
+              <span class="quick-card-title">Punjabi Wave</span>
+              <span class="quick-card-sub">Karan Aujla • Diljit • Shubh</span>
+            </div>
+            <button class="quick-card-play-btn" title="Play Punjabi Wave" aria-label="Play Punjabi Wave">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
 
           <!-- Card 8 -->
-          <div class="spotify-quick-card" data-query="Daily Mix 2 Arijit Singh Shreya Ghoshal" data-title="Daily Mix 2">
+          <div class="songbuddy-quick-card spotify-quick-card" data-query="Daily Mix 2 Arijit Singh Shreya Ghoshal" data-title="Romantic Melodies">
             <div class="quick-card-cover-wrap">
-              <img src="/assets/spotify_covers/daily_mix_2.svg?v=v2_authentic" alt="Daily Mix 2" class="quick-card-img" loading="eager">
+              <img src="/assets/spotify_covers/daily_mix_2.svg?v=v3_studio" alt="Romantic Melodies" class="quick-card-img" loading="eager">
             </div>
-            <span class="quick-card-title">Daily Mix 2</span>
-            <button class="quick-card-play-btn" title="Play Daily Mix 2" aria-label="Play Daily Mix 2">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <div class="quick-card-body">
+              <span class="quick-card-title">Romantic Melodies</span>
+              <span class="quick-card-sub">Arijit Singh • Shreya Ghoshal</span>
+            </div>
+            <button class="quick-card-play-btn" title="Play Romantic Melodies" aria-label="Play Romantic Melodies">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
           </div>
         </div>
 
-        <!-- Middle Section: Getting Started & Made For Speedrunner -->
-        <div class="spotify-middle-split">
-          <!-- Left: Getting Started Card -->
-          <div class="spotify-getting-started-wrapper">
-            <div class="spotify-section-nav-header">
-              <h2 class="spotify-section-heading">Getting started</h2>
-              <div class="spotify-nav-arrows">
-                <button class="spotify-arrow-btn" id="btn-getting-started-prev" title="Previous tip" aria-label="Previous tip">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
-                    <polyline points="15 18 9 12 15 6"></polyline>
-                  </svg>
-                </button>
-                <button class="spotify-arrow-btn" id="btn-getting-started-next" title="Next tip" aria-label="Next tip">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </button>
-              </div>
+        <!-- Section: Curated Studio Stations (For You) -->
+        <div class="songbuddy-curated-section">
+          <div class="songbuddy-section-header">
+            <div class="section-title-wrap">
+              <span class="section-eyebrow">PERSONALIZED FLOW</span>
+              <h2 class="section-headline" id="made-for-user-heading">Curated Stations For You</h2>
             </div>
-
-            <div class="spotify-getting-started-card" id="getting-started-card">
-              <div class="getting-started-content">
-                <h3 class="getting-started-title" id="getting-started-title">3. Watch a video</h3>
-                <p class="getting-started-desc" id="getting-started-desc">Play videos from your favorite artists and creators.</p>
-                <div class="getting-started-actions">
-                  <button class="spotify-pill-cta" id="btn-browse-videos">Browse videos</button>
-                  <button class="spotify-link-cta" id="btn-show-tips">Show more tips</button>
-                </div>
-              </div>
-              <div class="getting-started-visual">
-                <div class="getting-started-disc" id="getting-started-disc" title="Play Video Spotlight">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
-                  </svg>
-                </div>
-              </div>
-            </div>
+            <button class="section-action-link" id="btn-show-all-made-for">Explore All Stations &rarr;</button>
           </div>
 
-          <!-- Right: Made For Speedrunner Section -->
-          <div class="spotify-made-for-wrapper">
-            <div class="spotify-section-nav-header">
-              <div class="spotify-made-for-titles">
-                <span class="spotify-eyebrow">Made For</span>
-                <h2 class="spotify-section-heading" id="made-for-user-heading">Speedrunner</h2>
+          <div class="songbuddy-cards-grid" id="spotify-made-for-grid">
+            <!-- Station 01 -->
+            <div class="songbuddy-card spotify-album-card" data-query="Diljit Dosanjh AP Dhillon Arijit Singh" data-title="Station Mix 01">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/daily_mix_1.svg?v=v3_studio" alt="Station Mix 01" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Station Mix 01" aria-label="Play Station Mix 01">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <button class="spotify-show-all-btn" id="btn-show-all-made-for">Show all</button>
+              <h4 class="card-title spotify-album-title">Station Mix 01</h4>
+              <p class="card-desc spotify-album-desc">Diljit Dosanjh, AP Dhillon, Arijit Singh...</p>
             </div>
 
-            <div class="spotify-album-grid" id="spotify-made-for-grid">
-              <!-- Daily Mix 03 -->
-              <div class="spotify-album-card" data-query="Emiway Bantai Dino James rap" data-title="Daily Mix 03">
-                <div class="spotify-album-artwork-wrap">
-                  <img src="/assets/spotify_covers/daily_mix_3.svg?v=v2_authentic" alt="Daily Mix 03" class="spotify-album-art" loading="lazy">
-                  <button class="spotify-floating-play-btn" title="Play Daily Mix 03" aria-label="Play Daily Mix 03">
+            <!-- Station 02 -->
+            <div class="songbuddy-card spotify-album-card" data-query="Arijit Singh Shreya Ghoshal Jasleen" data-title="Station Mix 02">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/daily_mix_2.svg?v=v3_studio" alt="Station Mix 02" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Station Mix 02" aria-label="Play Station Mix 02">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                       <polygon points="7 4 20 12 7 20 7 4"></polygon>
                     </svg>
                   </button>
                 </div>
-                <h4 class="spotify-album-title">Daily Mix 03</h4>
-                <p class="spotify-album-desc">Emiway Bantai, Dino James, THE U.D and...</p>
               </div>
+              <h4 class="card-title spotify-album-title">Station Mix 02</h4>
+              <p class="card-desc spotify-album-desc">Arijit Singh, Shreya Ghoshal, Jasleen Royal...</p>
+            </div>
 
-              <!-- Daily Mix 04 -->
-              <div class="spotify-album-card" data-query="Karan Aujla Sidhu Moose Wala Punjabi" data-title="Daily Mix 04">
-                <div class="spotify-album-artwork-wrap">
-                  <img src="/assets/spotify_covers/daily_mix_4.svg?v=v2_authentic" alt="Daily Mix 04" class="spotify-album-art" loading="lazy">
-                  <button class="spotify-floating-play-btn" title="Play Daily Mix 04" aria-label="Play Daily Mix 04">
+            <!-- Station 03 -->
+            <div class="songbuddy-card spotify-album-card" data-query="Emiway Bantai Dino James MC Stan rap" data-title="Station Mix 03">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/daily_mix_3.svg?v=v3_studio" alt="Station Mix 03" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Station Mix 03" aria-label="Play Station Mix 03">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                       <polygon points="7 4 20 12 7 20 7 4"></polygon>
                     </svg>
                   </button>
                 </div>
-                <h4 class="spotify-album-title">Daily Mix 04</h4>
-                <p class="spotify-album-desc">Karan Aujla, Sidhu Moose Wala, Preet Harpal and...</p>
               </div>
+              <h4 class="card-title spotify-album-title">Station Mix 03</h4>
+              <p class="card-desc spotify-album-desc">Emiway Bantai, Dino James, MC Stan, Seedhe Maut...</p>
+            </div>
 
-              <!-- Daily Mix 05 -->
-              <div class="spotify-album-card" data-query="Yo Yo Honey Singh Asha Bhosle Glory" data-title="Daily Mix 05">
-                <div class="spotify-album-artwork-wrap">
-                  <img src="/assets/spotify_covers/daily_mix_5.svg?v=v2_authentic" alt="Daily Mix 05" class="spotify-album-art" loading="lazy">
-                  <button class="spotify-floating-play-btn" title="Play Daily Mix 05" aria-label="Play Daily Mix 05">
+            <!-- Station 04 -->
+            <div class="songbuddy-card spotify-album-card" data-query="Karan Aujla Sidhu Moose Wala Punjabi" data-title="Station Mix 04">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/daily_mix_4.svg?v=v3_studio" alt="Station Mix 04" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Station Mix 04" aria-label="Play Station Mix 04">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                       <polygon points="7 4 20 12 7 20 7 4"></polygon>
                     </svg>
                   </button>
                 </div>
-                <h4 class="spotify-album-title">Daily Mix 05</h4>
-                <p class="spotify-album-desc">Yo Yo Honey Singh, Asha Bhosle, Jojo Nathaniel...</p>
               </div>
+              <h4 class="card-title spotify-album-title">Station Mix 04</h4>
+              <p class="card-desc spotify-album-desc">Karan Aujla, Sidhu Moose Wala, Prem Dhillon...</p>
+            </div>
 
-              <!-- Daily Mix 06 -->
-              <div class="spotify-album-card" data-query="Abdul Hannan Hasan Raheem Coke Studio" data-title="Daily Mix 06">
-                <div class="spotify-album-artwork-wrap">
-                  <img src="/assets/spotify_covers/daily_mix_6.svg?v=v2_authentic" alt="Daily Mix 06" class="spotify-album-art" loading="lazy">
-                  <button class="spotify-floating-play-btn" title="Play Daily Mix 06" aria-label="Play Daily Mix 06">
+            <!-- Station 05 -->
+            <div class="songbuddy-card spotify-album-card" data-query="Yo Yo Honey Singh Badshah Paradox Glory" data-title="Station Mix 05">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/daily_mix_5.svg?v=v3_studio" alt="Station Mix 05" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Station Mix 05" aria-label="Play Station Mix 05">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                       <polygon points="7 4 20 12 7 20 7 4"></polygon>
                     </svg>
                   </button>
                 </div>
-                <h4 class="spotify-album-title">Daily Mix 06</h4>
-                <p class="spotify-album-desc">Abdul Hannan, Hasan Raheem, Asim Azhar and...</p>
               </div>
+              <h4 class="card-title spotify-album-title">Station Mix 05</h4>
+              <p class="card-desc spotify-album-desc">Yo Yo Honey Singh, Badshah, Paradox, Bohemia...</p>
+            </div>
+
+            <!-- Station 06 -->
+            <div class="songbuddy-card spotify-album-card" data-query="Abdul Hannan Hasan Raheem Asim Azhar Coke Studio" data-title="Station Mix 06">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/daily_mix_6.svg?v=v3_studio" alt="Station Mix 06" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Station Mix 06" aria-label="Play Station Mix 06">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <h4 class="card-title spotify-album-title">Station Mix 06</h4>
+              <p class="card-desc spotify-album-desc">Abdul Hannan, Hasan Raheem, Asim Azhar, Anuv Jain...</p>
             </div>
           </div>
         </div>
 
-        <!-- Lower Section: Recents -->
-        <div class="spotify-recents-wrapper">
-          <div class="spotify-section-nav-header">
-            <h2 class="spotify-section-heading">Recents</h2>
-            <button class="spotify-show-all-btn" id="btn-show-all-recents">Show all</button>
+        <!-- Section: Soundscapes & Chart Archives -->
+        <div class="songbuddy-soundscapes-section">
+          <div class="songbuddy-section-header">
+            <div class="section-title-wrap">
+              <span class="section-eyebrow">AUDIO ARCHIVES</span>
+              <h2 class="section-headline">Soundscapes &amp; Chartbusters</h2>
+            </div>
+            <button class="section-action-link" id="btn-show-all-recents">View Full Archive &rarr;</button>
           </div>
-          <div class="spotify-album-grid spotify-recents-grid" id="spotify-recents-grid">
+
+          <div class="songbuddy-cards-grid" id="spotify-recents-grid">
             <!-- Recent 1 -->
-            <div class="spotify-album-card" data-query="Coke Studio Pakistan Season 15" data-title="Coke Studio 15">
-              <div class="spotify-album-artwork-wrap">
-                <img src="/assets/spotify_covers/recent_1.svg?v=v2_authentic" alt="Coke Studio 15" class="spotify-album-art" loading="lazy">
-                <button class="spotify-floating-play-btn" title="Play Coke Studio 15">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
-                  </svg>
-                </button>
+            <div class="songbuddy-card spotify-album-card" data-query="Coke Studio Pakistan Season 15" data-title="Coke Studio 15">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/recent_1.svg?v=v3_studio" alt="Coke Studio 15" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Coke Studio 15">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <h4 class="spotify-album-title">Coke Studio 15</h4>
-              <p class="spotify-album-desc">Season 15 Fusion</p>
+              <h4 class="card-title spotify-album-title">Coke Studio 15</h4>
+              <p class="card-desc spotify-album-desc">Season 15 Fusion &amp; Worldwide</p>
             </div>
 
             <!-- Recent 2 -->
-            <div class="spotify-album-card" data-query="Top 50 Global Billboard hits" data-title="Global Top 50">
-              <div class="spotify-album-artwork-wrap">
-                <img src="/assets/spotify_covers/recent_2.svg?v=v2_authentic" alt="Global Top 50" class="spotify-album-art" loading="lazy">
-                <button class="spotify-floating-play-btn" title="Play Global Top 50">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
-                  </svg>
-                </button>
+            <div class="songbuddy-card spotify-album-card" data-query="Top 50 Global Billboard hits" data-title="Global Top 50">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/recent_2.svg?v=v3_studio" alt="Global Top 50" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Global Top 50">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <h4 class="spotify-album-title">Global Top 50</h4>
-              <p class="spotify-album-desc">Worldwide Charts</p>
+              <h4 class="card-title spotify-album-title">Global Top 50</h4>
+              <p class="card-desc spotify-album-desc">Worldwide Billboard Charts</p>
             </div>
 
             <!-- Recent 3 -->
-            <div class="spotify-album-card" data-query="Lofi chill beats study sleep" data-title="Lo-Fi Cafe">
-              <div class="spotify-album-artwork-wrap">
-                <img src="/assets/spotify_covers/recent_3.svg?v=v2_authentic" alt="Lo-Fi Cafe" class="spotify-album-art" loading="lazy">
-                <button class="spotify-floating-play-btn" title="Play Lo-Fi Cafe">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
-                  </svg>
-                </button>
+            <div class="songbuddy-card spotify-album-card" data-query="Lofi chill beats study sleep" data-title="Lo-Fi Cafe">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/recent_3.svg?v=v3_studio" alt="Lo-Fi Cafe" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Lo-Fi Cafe">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <h4 class="spotify-album-title">Lo-Fi Cafe</h4>
-              <p class="spotify-album-desc">Rain &amp; Chill Beats</p>
+              <h4 class="card-title spotify-album-title">Lo-Fi Midnight Cafe</h4>
+              <p class="card-desc spotify-album-desc">Rain, Study &amp; Chill Beats</p>
             </div>
 
             <!-- Recent 4 -->
-            <div class="spotify-album-card" data-query="Bollywood Retro Classics Kishore Kumar" data-title="Bollywood Retro">
-              <div class="spotify-album-artwork-wrap">
-                <img src="/assets/spotify_covers/recent_4.svg?v=v2_authentic" alt="Bollywood Retro" class="spotify-album-art" loading="lazy">
-                <button class="spotify-floating-play-btn" title="Play Bollywood Retro">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
-                  </svg>
-                </button>
+            <div class="songbuddy-card spotify-album-card" data-query="Bollywood Retro Classics Kishore Kumar" data-title="Bollywood Retro">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/recent_4.svg?v=v3_studio" alt="Bollywood Retro" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Bollywood Retro">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <h4 class="spotify-album-title">Bollywood Retro</h4>
-              <p class="spotify-album-desc">Golden Melodies</p>
+              <h4 class="card-title spotify-album-title">Bollywood Retro</h4>
+              <p class="card-desc spotify-album-desc">Golden Kishore &amp; RD Burman Era</p>
             </div>
 
             <!-- Recent 5 -->
-            <div class="spotify-album-card" data-query="Punjabi Wave AP Dhillon Diljit Dosanjh" data-title="Punjabi Wave">
-              <div class="spotify-album-artwork-wrap">
-                <img src="/assets/spotify_covers/recent_5.svg?v=v2_authentic" alt="Punjabi Wave" class="spotify-album-art" loading="lazy">
-                <button class="spotify-floating-play-btn" title="Play Punjabi Wave">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
-                  </svg>
-                </button>
+            <div class="songbuddy-card spotify-album-card" data-query="Punjabi Wave AP Dhillon Diljit Dosanjh" data-title="Punjabi Wave">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/recent_5.svg?v=v3_studio" alt="Punjabi Wave" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Punjabi Wave">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <h4 class="spotify-album-title">Punjabi Wave</h4>
-              <p class="spotify-album-desc">AP • Diljit • Shubh</p>
+              <h4 class="card-title spotify-album-title">Punjabi Wave</h4>
+              <p class="card-desc spotify-album-desc">AP • Diljit • Shubh</p>
             </div>
 
             <!-- Recent 6 -->
-            <div class="spotify-album-card" data-query="Synthwave 80s Retrowave Neon" data-title="Synthwave 80s">
-              <div class="spotify-album-artwork-wrap">
-                <img src="/assets/spotify_covers/recent_6.svg?v=v2_authentic" alt="Synthwave 80s" class="spotify-album-art" loading="lazy">
-                <button class="spotify-floating-play-btn" title="Play Synthwave 80s">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
-                  </svg>
-                </button>
+            <div class="songbuddy-card spotify-album-card" data-query="Synthwave 80s Retrowave Neon" data-title="Synthwave 80s">
+              <div class="card-artwork-box spotify-album-artwork-wrap">
+                <img src="/assets/spotify_covers/recent_6.svg?v=v3_studio" alt="Synthwave 80s" class="card-art-img spotify-album-art" loading="lazy">
+                <div class="card-overlay-actions">
+                  <button class="card-btn-play spotify-floating-play-btn" title="Play Synthwave 80s">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                      <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <h4 class="spotify-album-title">Synthwave 80s</h4>
-              <p class="spotify-album-desc">Neon Night Drive</p>
+              <h4 class="card-title spotify-album-title">Synthwave 80s</h4>
+              <p class="card-desc spotify-album-desc">Neon Night Drive &amp; Outrun</p>
             </div>
           </div>
         </div>
@@ -692,7 +842,7 @@
         <div id="artists-row" class="hidden"></div>
         <div id="top-charts-list" class="hidden"></div>
         <div id="hero-spotlight" class="hidden"></div>
-      </div>
+      </div>    </div>
 
       <!-- VIEW CONTAINER: SEARCH RESULTS -->
       <div id="view-search" class="view-panel">

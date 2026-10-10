@@ -7,7 +7,7 @@
 // State Definition
 // ============================================================================
 const state = {
-  theme: localStorage.getItem('songbuddy_theme') || 'neumorphic',
+  theme: localStorage.getItem('songbuddy_theme') || 'dark',
   currentTrack: null,
   isPlaying: false,
   queue: JSON.parse(localStorage.getItem('songbuddy_queue') || '[]'),
@@ -295,22 +295,20 @@ const DEFAULT_USER = {
   email: 'dave@songbuddy.studio',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
   plan: 'Hi-Fi Studio VIP'
-};
-
-const SPOTIFY_USER = {
-  id: 'usr_spotify_alex',
-  name: 'Alex Rivera (Spotify)',
-  email: 'alex.rivera@spotify.com',
+};const SPOTIFY_USER = {
+  id: 'usr_alex_rivera',
+  name: 'Alex Rivera',
+  email: 'alex.rivera@songbuddy.studio',
   avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
-  plan: 'Spotify Premium Hi-Fi'
+  plan: 'Hi-Fi Studio VIP'
 };
 
 const GOOGLE_USER = {
   id: 'usr_google_dave',
-  name: 'Dave Cooper (Google)',
-  email: 'dave.cooper@gmail.com',
+  name: 'Dave Cooper',
+  email: 'dave.cooper@songbuddy.studio',
   avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
-  plan: 'Google Hi-Fi Member'
+  plan: 'Hi-Fi Studio VIP'
 };
 
 let toastTimer = null;
@@ -324,7 +322,6 @@ function showToastNotification(message) {
   }
   toast.innerHTML = `<span>${message}</span>`;
   toast.classList.add('visible');
-
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     toast.classList.remove('visible');
@@ -339,18 +336,19 @@ function checkAuthState() {
   overlay?.classList.add('hidden');
 
   if (user) {
-    if ($('user-name')) $('user-name').textContent = user.name;
+    const cleanName = user.name ? user.name.replace(/\s*\([^)]*\)/g, '').trim() : 'Listener';
+    if ($('user-name')) $('user-name').textContent = cleanName;
     if ($('user-avatar')) $('user-avatar').src = user.avatar;
-    if ($('dropdown-user-name')) $('dropdown-user-name').textContent = user.name;
+    if ($('dropdown-user-name')) $('dropdown-user-name').textContent = cleanName;
     if ($('dropdown-user-email')) $('dropdown-user-email').textContent = user.email;
     if ($('dropdown-avatar')) $('dropdown-avatar').src = user.avatar;
-    if ($('made-for-user-heading')) $('made-for-user-heading').textContent = user.name;
+    if ($('made-for-user-heading')) $('made-for-user-heading').textContent = `Curated Flow for ${cleanName.split(' ')[0] || cleanName}`;
   } else {
     if ($('user-name')) $('user-name').textContent = 'Guest';
     if ($('user-avatar')) $('user-avatar').src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
     if ($('dropdown-user-name')) $('dropdown-user-name').textContent = 'Guest Listener';
     if ($('dropdown-user-email')) $('dropdown-user-email').textContent = 'Click to sign in';
-    if ($('made-for-user-heading')) $('made-for-user-heading').textContent = 'Speedrunner';
+    if ($('made-for-user-heading')) $('made-for-user-heading').textContent = 'Curated Stations For You';
   }
 }
 
@@ -510,7 +508,7 @@ function handleAuthFormSubmit() {
 // Theme Management & Dynamic Toasts
 // ============================================================================
 function initTheme() {
-  const savedTheme = localStorage.getItem('songbuddy_theme') || 'neumorphic';
+  const savedTheme = localStorage.getItem('songbuddy_theme') || 'dark';
   setTheme(savedTheme, false);
 }
 
@@ -3270,12 +3268,14 @@ function setupEventListeners() {
     });
   });
 
-  // Spotify Circular Home Button
+  // SongBuddy Top Nav Home Button
   $('btn-top-home')?.addEventListener('click', () => {
     switchView('home');
+    const feed = $('view-home');
+    if (feed) feed.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
-  // Spotify Browse Button
+  // Search Browse Shortcut
   $('btn-search-browse')?.addEventListener('click', () => {
     switchView('search');
     const input = $('search-input');
@@ -3285,32 +3285,49 @@ function setupEventListeners() {
     }
   });
 
-  // Spotify Explore Premium Pill Button
-  $('btn-explore-premium')?.addEventListener('click', () => {
-    showToastNotification('SongBuddy Hi-Fi VIP: Unlimited skips, 320kbps Lossless, Zero Ads ✨');
+  // Top Nav Studio Hi-Fi Equalizer Badge
+  $('btn-studio-eq-top')?.addEventListener('click', () => {
+    openEqualizerModal();
   });
 
-  // Spotify Feed Filter Pills (All, Music, Podcasts)
-  document.querySelectorAll('.spotify-feed-pill').forEach(pill => {
+  // SongBuddy Sound Capsule Vibe Filters
+  document.querySelectorAll('.songbuddy-feed-pill, .spotify-feed-pill').forEach(pill => {
     pill.addEventListener('click', () => {
-      document.querySelectorAll('.spotify-feed-pill').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.songbuddy-feed-pill, .spotify-feed-pill').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       const filter = pill.dataset.feedFilter;
-      if (filter === 'podcasts') {
-        showToastNotification('Filtering Podcasts & Talk Shows 🎙️');
-        const input = $('search-input');
-        if (input) input.value = 'Popular Podcasts 2024';
-        handleSearch('Popular Podcasts 2024', true);
-      } else if (filter === 'music') {
-        showToastNotification('Music feed selected 🎵');
-        switchView('home');
+      switchView('home');
+      
+      if (filter === 'trending') {
+        showToastNotification('Loading Trending Chart Hits 🔥');
+        quickPlaySpotifyCard('Top Trending Global & Indian Hits 2026', 'Trending Hits');
+      } else if (filter === 'automix') {
+        showToastNotification('Continuous Automix Activated ⚡');
+        if (state.currentTrack) {
+          state.radioEnabled = true;
+          startRadioRecommendations(state.currentTrack);
+        } else {
+          quickPlaySpotifyCard('Continuous Electronic Chill Beats', 'Continuous Automix');
+        }
+      } else if (filter === 'lofi') {
+        showToastNotification('Lo-Fi & Chill Station 🌙');
+        quickPlaySpotifyCard('Lo-Fi Hip Hop Study Chill Relax Beats', 'Lo-Fi & Chill');
+      } else if (filter === 'hiphop') {
+        showToastNotification('Desi Hip Hop & Rap Drops 🚀');
+        quickPlaySpotifyCard('Best Hip Hop and Rap hits 2026', 'Hip-Hop Station');
+      } else if (filter === 'punjabi') {
+        showToastNotification('Punjabi Wave Beats 💥');
+        quickPlaySpotifyCard('Trending Punjabi wave hits Karan Aujla Diljit', 'Punjabi Wave');
+      } else if (filter === 'bollywood') {
+        showToastNotification('Bollywood Classics & Retro 📻');
+        quickPlaySpotifyCard('Bollywood classic and retro hit songs', 'Bollywood Classics');
       } else {
-        switchView('home');
+        showToastNotification('Personalized Flow Active ✨');
       }
     });
   });
 
-  // Helper for 1-Click Instant Playback on Quick Cards & Album Cards
+  // Helper for 1-Click Instant Playback on Quick Cards & Station Cards
   async function quickPlaySpotifyCard(query, title) {
     showToastNotification(`Playing ${title}... 🎧`);
     try {
@@ -3332,86 +3349,105 @@ function setupEventListeners() {
     }
   }
 
-  // Spotify 2x4 Quick Play Cards
-  document.querySelectorAll('.spotify-quick-card').forEach(card => {
-    card.addEventListener('click', () => {
+  // Quick Flow Instant Station Cards
+  document.querySelectorAll('.songbuddy-quick-card, .spotify-quick-card').forEach(card => {
+    card.addEventListener('click', (e) => {
       const query = card.dataset.query || card.querySelector('.quick-card-title')?.textContent;
-      const title = card.dataset.title || card.querySelector('.quick-card-title')?.textContent || 'Playlist';
+      const title = card.dataset.title || card.querySelector('.quick-card-title')?.textContent || 'Station';
       if (query) quickPlaySpotifyCard(query, title);
     });
   });
 
-  // Spotify Album Cards (Made For & Recents)
-  document.querySelectorAll('.spotify-album-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const query = card.dataset.query || card.querySelector('.spotify-album-desc')?.textContent;
-      const title = card.dataset.title || card.querySelector('.spotify-album-desc')?.textContent || 'Mix';
+  // Curated Station Cards & Soundscapes
+  document.querySelectorAll('.songbuddy-card, .spotify-album-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      const query = card.dataset.query || card.querySelector('.card-desc, .spotify-album-desc')?.textContent;
+      const title = card.dataset.title || card.querySelector('.card-title, .spotify-album-title')?.textContent || 'Station Mix';
       if (query) quickPlaySpotifyCard(query, title);
     });
   });
 
-  // Getting Started Card Tip Carousel & Video Actions
-  const GETTING_STARTED_TIPS = [
+  // Studio Highlights Carousel
+  const STUDIO_HIGHLIGHTS = [
     {
-      title: '1. Lossless Studio Audio',
-      desc: 'Experience pure 320kbps audio clarity with dynamic range compression and auto-gain.',
-      cta: 'Explore Audio'
+      title: 'Continuous Audio Workstation',
+      desc: 'Lossless in-memory bitstream buffering with continuous YouTube Automix, 5-band graphic equalizer, synced lyrics, and dynamic ambilight.',
+      cta: 'Start Flow Radio'
     },
     {
-      title: '2. Screen-Off Playback',
-      desc: 'Lock your phone or turn display off while your favorite music continues playing smoothly.',
-      cta: 'Learn Screen-Off'
+      title: '5-Band Studio Equalizer',
+      desc: 'Precision frequency sculpting: 60Hz Sub-Bass, 250Hz Punch, 1kHz Vocals, 4kHz Air, and 12kHz Brilliance with quick acoustic presets.',
+      cta: 'Open Equalizer'
     },
     {
-      title: '3. Watch a video',
-      desc: 'Play videos from your favorite artists and creators.',
-      cta: 'Browse videos'
+      title: 'Lossless Flow Automix',
+      desc: 'Continuous smart radio that automatically queues harmonic acoustic matches so your session never goes silent.',
+      cta: 'Launch Automix'
     },
     {
-      title: '4. TV Mode Ambilight',
-      desc: 'Press "F" key or tap TV Mode button for synced fullscreen ambient atmospheric visuals.',
+      title: 'Cinema Ambilight TV Mode',
+      desc: 'Press "F" key or tap TV Mode button for synced fullscreen ambient reactive visuals and floating typography.',
       cta: 'Enter TV Mode'
     }
   ];
-  let currentTipIndex = 2; // Default to tip 3 ("3. Watch a video")
+  let currentHighlightIndex = 0;
 
-  function updateGettingStartedTip(idx) {
-    currentTipIndex = (idx + GETTING_STARTED_TIPS.length) % GETTING_STARTED_TIPS.length;
-    const tip = GETTING_STARTED_TIPS[currentTipIndex];
-    if ($('getting-started-title')) $('getting-started-title').textContent = tip.title;
-    if ($('getting-started-desc')) $('getting-started-desc').textContent = tip.desc;
-    if ($('btn-browse-videos')) $('btn-browse-videos').textContent = tip.cta;
+  function updateStudioHighlight(idx) {
+    currentHighlightIndex = (idx + STUDIO_HIGHLIGHTS.length) % STUDIO_HIGHLIGHTS.length;
+    const highlight = STUDIO_HIGHLIGHTS[currentHighlightIndex];
+    if ($('getting-started-title')) $('getting-started-title').textContent = highlight.title;
+    if ($('getting-started-desc')) $('getting-started-desc').textContent = highlight.desc;
+    if ($('btn-browse-videos')) {
+      const ctaSpan = $('btn-browse-videos').querySelector('span');
+      if (ctaSpan) ctaSpan.textContent = highlight.cta;
+      else $('btn-browse-videos').textContent = highlight.cta;
+    }
   }
 
   $('btn-getting-started-prev')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    updateGettingStartedTip(currentTipIndex - 1);
+    updateStudioHighlight(currentHighlightIndex - 1);
   });
   $('btn-getting-started-next')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    updateGettingStartedTip(currentTipIndex + 1);
+    updateStudioHighlight(currentHighlightIndex + 1);
   });
 
   $('btn-browse-videos')?.addEventListener('click', () => {
-    if (currentTipIndex === 2 || currentTipIndex === 3) {
-      toggleCinemaAmbilight();
+    if (currentHighlightIndex === 0) {
+      quickPlaySpotifyCard('Top Trending Global hits 2026', 'Flow Radio');
+    } else if (currentHighlightIndex === 1) {
+      openEqualizerModal();
+    } else if (currentHighlightIndex === 2) {
+      quickPlaySpotifyCard('Continuous Electronic Chill Beats', 'Continuous Automix');
     } else {
-      showToastNotification(GETTING_STARTED_TIPS[currentTipIndex].desc);
+      toggleCinemaAmbilight();
     }
   });
 
+  // Studio Hero Equalizer Button
+  $('btn-hero-equalizer')?.addEventListener('click', () => {
+    openEqualizerModal();
+  });
+
+  // Studio Hero TV Mode Button
+  $('btn-hero-tv')?.addEventListener('click', () => {
+    toggleCinemaAmbilight();
+  });
+
+  // Visualizer Orb Click
   $('getting-started-disc')?.addEventListener('click', () => {
     toggleCinemaAmbilight();
   });
 
   $('btn-show-tips')?.addEventListener('click', () => {
-    updateGettingStartedTip(currentTipIndex + 1);
+    updateStudioHighlight(currentHighlightIndex + 1);
   });
 
   $('btn-show-all-made-for')?.addEventListener('click', () => {
     const input = $('search-input');
-    if (input) input.value = 'Daily Mix India trending hits';
-    handleSearch('Daily Mix India trending hits', true);
+    if (input) input.value = 'Trending Indie and Bollywood Melodies';
+    handleSearch('Trending Indie and Bollywood Melodies', true);
   });
 
   $('btn-show-all-recents')?.addEventListener('click', () => {
