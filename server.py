@@ -1323,11 +1323,168 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def handle_subsonic_request(self, path: str, params: Dict[str, List[str]], http_method: str = "GET"):
+        """Dispatches OpenSubsonic requests to the OpenSubsonic controller or streaming proxy."""
+        method_name = path[len("/rest/"):].strip("/")
+        is_json = params.get("f", ["xml"])[0].lower() == "json"
+
+        # 1. Media streaming endpoint
+        if method_name in ("stream", "stream.view"):
+            from opensubsonic import authenticate_subsonic, build_subsonic_response
+            is_auth, user, err = authenticate_subsonic(params, USERS_DB)
+            if not is_auth:
+                body, ctype, status = build_subsonic_response(error=(40, err or "Wrong username or password"), is_json=is_json)
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except Exception:
+                    pass
+                return
+
+            vid = params.get("id", [""])[0]
+            if not vid:
+                body, ctype, status = build_subsonic_response(error=(10, "Required parameter 'id' is missing"), is_json=is_json)
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except Exception:
+                    pass
+                return
+
+            try:
+                stream_info = resolve_stream_url(vid, quality="high")
+                stream_url = stream_info["stream_url"]
+            except Exception as e:
+                logger.error(f"OpenSubsonic stream resolution failure for {vid}: {e}")
+                body, ctype, status = build_subsonic_response(error=(70, f"Audio stream unavailable: {str(e)}"), is_json=is_json)
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except Exception:
+                    pass
+                return
+
+            # Always redirect on Vercel or when redirect requested
+            if os.getenv("VERCEL") or params.get("redirect", ["false"])[0].lower() == "true":
+                self.send_response(307)
+                self.send_header("Location", stream_url)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "public, max-age=3600")
+                self.end_headers()
+                return
+
+            req_headers = {"User-Agent": USER_AGENT}
+            if "Range" in self.headers:
+                req_headers["Range"] = self.headers["Range"]
+
+            resp = None
+            try:
+                resp = requests.get(stream_url, headers=req_headers, stream=True, timeout=(5.0, 20.0))
+                self.send_response(resp.status_code)
+                for header in ["Content-Type", "Content-Range", "Content-Length", "Accept-Ranges"]:
+                    if header in resp.headers:
+                        self.send_header(header, resp.headers[header])
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        self.wfile.write(chunk)
+                return
+            except Exception as e:
+                logger.error(f"OpenSubsonic stream proxy error for {vid}: {e}")
+                return
+            finally:
+                if resp is not None:
+                    resp.close()
+
+        # 2. Cover art retrieval
+        if method_name in ("getCoverArt", "getCoverArt.view"):
+            vid = params.get("id", [""])[0]
+            thumb_url = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else "https://songbuddy-swart.vercel.app/logo.png"
+            self.send_response(307)
+            self.send_header("Location", thumb_url)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            return
+
+        # 3. All other OpenSubsonic endpoints
+        from opensubsonic import OpenSubsonicController
+        controller = OpenSubsonicController(sys.modules[__name__])
+        body, ctype, status = controller.handle_request(method_name, params, http_method=http_method)
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def handle_subsonic_post(self, path: str, params: Dict[str, List[str]], body_bytes: bytes):
+        """Handles OpenSubsonic POST requests (form-encoded and JSON payloads)."""
+        method_name = path[len("/rest/"):].strip("/")
+        post_data = {}
+        content_type = self.headers.get("Content-Type", "")
+        if "application/x-www-form-urlencoded" in content_type:
+            try:
+                body_params = urllib.parse.parse_qs(body_bytes.decode("utf-8"))
+                for k, v in body_params.items():
+                    params[k] = v
+            except Exception:
+                pass
+        elif "application/json" in content_type:
+            try:
+                post_data = json.loads(body_bytes.decode("utf-8"))
+            except Exception:
+                pass
+
+        from opensubsonic import OpenSubsonicController
+        controller = OpenSubsonicController(sys.modules[__name__])
+        body, ctype, status = controller.handle_request(method_name, params, http_method="POST", post_body=post_data)
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def do_POST(self):
         """Handles authentication and account management endpoints."""
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         client_ip = self.get_client_ip()
+
+        content_len = int(self.headers.get("Content-Length", 0))
+        body_bytes = self.rfile.read(content_len) if content_len > 0 else b"{}"
+
+        # 0. OpenSubsonic POST Gateway
+        if path.startswith("/rest/"):
+            params = urllib.parse.parse_qs(parsed.query)
+            if os.getenv("ENVIRONMENT") != "test":
+                allowed, rate_info = RATE_LIMITER.is_allowed(client_ip, endpoint="rest_subsonic")
+                if not allowed:
+                    self.send_response(429)
+                    self.send_header("Retry-After", str(rate_info.get("retry_after", 60)))
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(rate_info).encode("utf-8"))
+                    return
+            self.handle_subsonic_post(path, params, body_bytes)
+            return
 
         if os.getenv("ENVIRONMENT") != "test":
             allowed, rate_info = RATE_LIMITER.is_allowed(client_ip, endpoint="api_auth")
@@ -1338,9 +1495,6 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps(rate_info).encode("utf-8"))
                 return
-
-        content_len = int(self.headers.get("Content-Length", 0))
-        body_bytes = self.rfile.read(content_len) if content_len > 0 else b"{}"
 
         try:
             post_data = json.loads(body_bytes.decode("utf-8"))
@@ -1480,6 +1634,19 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         path = parsed.path
         params = urllib.parse.parse_qs(parsed.query)
         client_ip = self.get_client_ip()
+        # OpenSubsonic API Gateway (/rest/<method> or /rest/<method>.view)
+        if path.startswith("/rest/"):
+            if os.getenv("ENVIRONMENT") != "test":
+                allowed, rate_info = RATE_LIMITER.is_allowed(client_ip, endpoint="rest_subsonic")
+                if not allowed:
+                    self.send_response(429)
+                    self.send_header("Retry-After", str(rate_info.get("retry_after", 60)))
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(rate_info).encode("utf-8"))
+                    return
+            self.handle_subsonic_request(path, params, http_method="GET")
+            return
 
         PUBLIC_ENDPOINTS = {
             "/", "/api/trending", "/api/health", "/api/search", "/api/radio",

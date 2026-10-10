@@ -635,6 +635,7 @@ async function initApp() {
   updateScreenOffUI();
   initPWA();
   initAudioSuiteUI();
+  initSubsonicUI();
 
   // Initialize IndexedDB Offline Storage & Synchronize User Library
   OfflineDB.init().catch(console.warn);
@@ -6179,6 +6180,123 @@ async function handlePWAInstallClick() {
       showToastNotification('To install: click the Install icon in your browser address bar or menu.');
     }
   }
+}
+
+// ============================================================================
+// OPENSUBSONIC MOBILE INTEGRATION CONTROLLER
+// ============================================================================
+function initSubsonicUI() {
+  const modal = $('subsonic-modal');
+  const backdrop = $('subsonic-backdrop');
+  const btnClose = $('btn-close-subsonic');
+  const btnDone = $('btn-done-subsonic');
+  const btnOpenTop = $('btn-studio-subsonic');
+  const chipOpen = $('chip-subsonic');
+
+  const inputUrl = $('subsonic-input-url');
+  const inputUser = $('subsonic-input-user');
+  const inputPass = $('subsonic-input-pass');
+
+  const btnCopyUrl = $('btn-copy-subsonic-url');
+  const btnCopyUser = $('btn-copy-subsonic-user');
+  const btnCopyPass = $('btn-copy-subsonic-pass');
+
+  const btnPing = $('btn-test-subsonic-conn');
+  const pingBtnText = $('subsonic-ping-btn-text');
+  const statusText = $('subsonic-status-text');
+  const liveIndicator = $('subsonic-indicator');
+
+  // Dynamically set server URL based on current origin
+  if (inputUrl) {
+    const origin = window.location.origin;
+    inputUrl.value = `${origin}/rest`;
+  }
+
+  function openSubsonicModal() {
+    if (!modal) return;
+    if (inputUrl) {
+      inputUrl.value = `${window.location.origin}/rest`;
+    }
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSubsonicModal() {
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  btnOpenTop?.addEventListener('click', openSubsonicModal);
+  chipOpen?.addEventListener('click', openSubsonicModal);
+  btnClose?.addEventListener('click', closeSubsonicModal);
+  btnDone?.addEventListener('click', closeSubsonicModal);
+  backdrop?.addEventListener('click', closeSubsonicModal);
+
+  // Copy helper with feedback
+  function setupCopyButton(btn, input, label) {
+    btn?.addEventListener('click', async () => {
+      if (!input) return;
+      try {
+        await navigator.clipboard.writeText(input.value);
+        const origText = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.style.background = '#ffffff';
+        btn.style.color = '#000000';
+        showToastNotification(`Copied ${label} to clipboard`);
+        setTimeout(() => {
+          btn.textContent = origText;
+          btn.style.background = '';
+          btn.style.color = '';
+        }, 1800);
+      } catch (err) {
+        input.select();
+        document.execCommand('copy');
+        showToastNotification(`Copied ${label}`);
+      }
+    });
+  }
+
+  setupCopyButton(btnCopyUrl, inputUrl, 'Server URL');
+  setupCopyButton(btnCopyUser, inputUser, 'Username');
+  setupCopyButton(btnCopyPass, inputPass, 'Password');
+
+  // Test Ping handler
+  btnPing?.addEventListener('click', async () => {
+    if (!statusText) return;
+    const startTime = performance.now();
+    if (pingBtnText) pingBtnText.textContent = 'Pinging...';
+    if (liveIndicator) liveIndicator.style.background = '#aaaaaa';
+
+    try {
+      const resp = await fetch('/rest/ping.view?u=admin&p=songbuddy&f=json');
+      const latency = Math.round(performance.now() - startTime);
+      if (resp.ok) {
+        const data = await resp.json();
+        const ver = data?.['subsonic-response']?.version || '1.16.1';
+        statusText.textContent = `200 OK — ${latency}ms latency — v${ver} Ready`;
+        if (liveIndicator) {
+          liveIndicator.style.background = '#ffffff';
+          liveIndicator.style.boxShadow = '0 0 10px #ffffff';
+        }
+        showToastNotification(`OpenSubsonic ping OK (${latency}ms)`);
+      } else {
+        statusText.textContent = `Status: HTTP ${resp.status}`;
+      }
+    } catch (e) {
+      statusText.textContent = 'Ping failed: ' + e.message;
+      if (liveIndicator) liveIndicator.style.background = '#ff4444';
+    } finally {
+      if (pingBtnText) pingBtnText.textContent = 'Test Ping';
+    }
+  });
+
+  // ESC key listener
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+      closeSubsonicModal();
+    }
+  });
 }
 
 // Start application when DOM is ready

@@ -30,6 +30,7 @@ class AdvancedRateLimiter:
             "api_stream": {"requests": 150, "window": 60, "burst": 25},
             "api_radio": {"requests": 60, "window": 60, "burst": 15},
             "api_lyrics": {"requests": 60, "window": 60, "burst": 15},
+            "rest_subsonic": {"requests": 300, "window": 60, "burst": 60},
             "default": {"requests": 120, "window": 60, "burst": 25}
         }
 

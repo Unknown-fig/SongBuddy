@@ -40,7 +40,7 @@ class handler(SongBuddyHandler):
                 or self.headers.get("x-matched-path")
                 or self.headers.get("x-vercel-forwarded-for")
             )
-            if forwarded and forwarded.startswith("/api"):
+            if forwarded and (forwarded.startswith("/api") or forwarded.startswith("/rest")):
                 real_path = urllib.parse.urlparse(forwarded).path
 
         if real_path:

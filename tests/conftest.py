@@ -83,3 +83,8 @@ def ensure_server_running():
 def client():
     """Fixture for HTTP client"""
     return HTTPConnection("127.0.0.1", 8000, timeout=10)
+
+@pytest.fixture
+def test_server():
+    """Fixture returning base test server URL"""
+    return "http://127.0.0.1:8000"

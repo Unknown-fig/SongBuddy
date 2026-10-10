@@ -24,6 +24,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/index.py?__path__=/api/$1"
+    },
+    {
+      "source": "/rest/(.*)",
+      "destination": "/api/index.py?__path__=/rest/$1"
     }
   ],
   "functions": {

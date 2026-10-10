@@ -308,7 +308,131 @@ def analyze_karaoke_readiness(title: str, artist: str) -> str:
     except Exception as e:
         return json.dumps({"status": "error", "message": f"Karaoke analysis failed: {str(e)}"})
 
+@mcp.tool()
+def subsonic_ping(username: str = "admin", password: str = "songbuddy") -> str:
+    """
+    OpenSubsonic Protocol Ping:
+    Verifies connection status, authentication, and protocol readiness against SongBuddy's OpenSubsonic server.
+    Returns protocol version, server type, latency, and supported extensions.
+    """
+    try:
+        import hashlib
+        from opensubsonic import authenticate_subsonic, OPEN_SUBSONIC_EXTENSIONS, SUBSONIC_API_VERSION
+        import server
+        
+        salt = "sb_mcp_salt"
+        token = hashlib.md5((password + salt).encode("utf-8")).hexdigest()
+        params = {"u": [username], "t": [token], "s": [salt], "f": ["json"]}
+        is_auth, user, err = authenticate_subsonic(params, server.USERS_DB)
+        
+        return json.dumps({
+            "status": "ok" if is_auth else "failed",
+            "authenticated": is_auth,
+            "username": user or username,
+            "server_type": "songbuddy",
+            "subsonic_version": SUBSONIC_API_VERSION,
+            "openSubsonic": True,
+            "extensions_supported": [e["name"] for e in OPEN_SUBSONIC_EXTENSIONS],
+            "error": err
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"status": "error", "message": f"Subsonic ping failed: {str(e)}"})
+
+@mcp.tool()
+def subsonic_search(query: str, count: int = 10, username: str = "admin") -> str:
+    """
+    OpenSubsonic Search Catalog:
+    Queries the SongBuddy library and streaming catalog using the OpenSubsonic search3 specification.
+    Returns structured results with songs, albums, and artists formatted for mobile clients.
+    """
+    try:
+        import server
+        from opensubsonic import OpenSubsonicController
+        controller = OpenSubsonicController(server)
+        params = {"query": [query], "songCount": [str(count)], "u": [username], "f": ["json"]}
+        body, ctype, status = controller.handle_request("search3", params, http_method="GET")
+        return body.decode("utf-8")
+    except Exception as e:
+        return json.dumps({"status": "error", "message": f"Subsonic search failed: {str(e)}"})
+
+@mcp.tool()
+def subsonic_stream_info(track_id: str, server_base_url: str = "https://songbuddy-swart.vercel.app") -> str:
+    """
+    OpenSubsonic Stream Endpoint Resolver:
+    Resolves the streaming URL, bitrate, and headers for third-party Subsonic clients (Symfonium, Feishin, DSub, Amperfy).
+    """
+    try:
+        import server
+        from opensubsonic import format_subsonic_song
+        song = None
+        for t in getattr(server, "FEATURED_TRACKS", []):
+            if t.get("id") == track_id:
+                song = format_subsonic_song(t)
+                break
+        if not song:
+            song = format_subsonic_song({"id": track_id, "title": f"Track {track_id}", "artist": "SongBuddy"})
+
+        stream_url = f"{server_base_url.rstrip('/')}/rest/stream.view?id={track_id}&u=admin&p=songbuddy&v=1.16.1&c=Symfonium"
+        cover_art_url = f"{server_base_url.rstrip('/')}/rest/getCoverArt.view?id={track_id}&u=admin&p=songbuddy"
+
+        return json.dumps({
+            "status": "success",
+            "track_id": track_id,
+            "title": song["title"],
+            "artist": song["artist"],
+            "stream_endpoint": stream_url,
+            "cover_art_endpoint": cover_art_url,
+            "format": "mp3",
+            "bitrate_kbps": 320,
+            "duration_seconds": song["duration"],
+            "supported_clients": ["Symfonium (Android)", "Feishin (Desktop)", "Amperfy (iOS)", "DSub", "Ultrasonic"]
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"status": "error", "message": f"Subsonic stream info resolution failed: {str(e)}"})
+
+@mcp.tool()
+def subsonic_client_connect_info(server_url: str = "https://songbuddy-swart.vercel.app") -> str:
+    """
+    OpenSubsonic Client Connection Guide:
+    Generates exact connection parameters, server URLs, and credential templates for mobile and desktop apps.
+    """
+    clean_url = server_url.rstrip('/')
+    rest_url = f"{clean_url}/rest"
+    
+    return json.dumps({
+        "status": "success",
+        "protocol": "OpenSubsonic / Subsonic REST API v1.16.1",
+        "server_configuration": {
+            "server_url": rest_url,
+            "legacy_base_url": clean_url,
+            "username": "admin",
+            "default_password": "songbuddy",
+            "api_key": "songbuddy-subsonic-key",
+            "auth_scheme": "Token + Salt (MD5) or Plaintext / OpenSubsonic API Key"
+        },
+        "compatible_apps": {
+            "android": [
+                {"name": "Symfonium", "type": "Native Android", "setup": "Add Media Provider -> Subsonic -> Server: " + rest_url},
+                {"name": "DSub", "type": "Android", "setup": "Server URL: " + rest_url},
+                {"name": "Ultrasonic", "type": "F-Droid / Android", "setup": "Server: " + rest_url}
+            ],
+            "ios": [
+                {"name": "Amperfy", "type": "Native iOS", "setup": "Add Account -> Subsonic -> URL: " + rest_url},
+                {"name": "substreamer", "type": "iOS & Android", "setup": "Server URL: " + clean_url}
+            ],
+            "desktop": [
+                {"name": "Feishin", "type": "Windows/macOS/Linux", "setup": "Server -> Subsonic -> " + rest_url}
+            ]
+        },
+        "test_endpoints": {
+            "ping": f"{rest_url}/ping.view?u=admin&p=songbuddy&f=json",
+            "extensions": f"{rest_url}/getOpenSubsonicExtensions.view?f=json",
+            "search": f"{rest_url}/search3.view?query=starboy&u=admin&p=songbuddy&f=json"
+        }
+    }, indent=2)
+
 if __name__ == "__main__":
     # Runs the MCP server over standard stdio for agents
     mcp.run()
+
 

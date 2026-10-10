@@ -293,6 +293,13 @@
 
         <!-- Right User Actions + Studio Hi-Fi Badge -->
         <div class="top-user-actions">
+          <button class="songbuddy-studio-badge" id="btn-studio-subsonic" title="OpenSubsonic Mobile Sync (Symfonium / Feishin / Amperfy)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg>
+            <span>Subsonic Sync</span>
+          </button>
           <button class="songbuddy-studio-badge" id="btn-studio-eq-top" title="Open 5-Band Studio Equalizer">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
               <line x1="4" y1="21" x2="4" y2="14"></line>
@@ -1083,6 +1090,12 @@
               <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
               <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
               <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          </button>
+          <button class="neu-chip-btn chip-subsonic" id="chip-subsonic" title="OpenSubsonic Mobile Integration">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
             </svg>
           </button>
         </div>
@@ -2017,6 +2030,130 @@
       <div class="equalizer-footer">
         <button type="button" class="eq-btn-reset" id="btn-eq-reset">Reset to Flat</button>
         <span class="eq-footer-note">Hardware-Accelerated Web Audio Engine</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       OPENSUBSONIC MOBILE INTEGRATION MODAL
+       ==================================================================== -->
+  <div id="subsonic-modal" class="subsonic-modal hidden" aria-modal="true" role="dialog" aria-label="OpenSubsonic Mobile Integration">
+    <div class="subsonic-backdrop" id="subsonic-backdrop"></div>
+    <div class="subsonic-card">
+      <div class="subsonic-header">
+        <div class="subsonic-title-wrap">
+          <div class="subsonic-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="22" height="22">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="subsonic-title">OpenSubsonic Mobile Sync</h3>
+            <p class="subsonic-subtitle">Direct streaming for Symfonium, Feishin, DSub &amp; Amperfy</p>
+          </div>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-subsonic" aria-label="Close Subsonic Modal">&times;</button>
+      </div>
+
+      <!-- Live Connection Status Strip -->
+      <div class="subsonic-status-strip">
+        <div class="subsonic-status-left">
+          <span class="subsonic-live-indicator" id="subsonic-indicator"></span>
+          <span class="subsonic-status-text" id="subsonic-status-text">Subsonic API v1.16.1 Active</span>
+        </div>
+        <button type="button" class="subsonic-ping-btn" id="btn-test-subsonic-conn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          <span id="subsonic-ping-btn-text">Test Ping</span>
+        </button>
+      </div>
+
+      <!-- Quick Credentials Box -->
+      <div class="subsonic-credentials-grid">
+        <div class="subsonic-field-card">
+          <div class="subsonic-field-label">Server REST URL</div>
+          <div class="subsonic-input-wrap">
+            <input type="text" class="subsonic-field-input" id="subsonic-input-url" readonly value="https://songbuddy-swart.vercel.app/rest">
+            <button type="button" class="subsonic-copy-btn" id="btn-copy-subsonic-url" title="Copy Server URL">Copy</button>
+          </div>
+        </div>
+
+        <div class="subsonic-field-card">
+          <div class="subsonic-field-label">Username</div>
+          <div class="subsonic-input-wrap">
+            <input type="text" class="subsonic-field-input" id="subsonic-input-user" readonly value="admin">
+            <button type="button" class="subsonic-copy-btn" id="btn-copy-subsonic-user" title="Copy Username">Copy</button>
+          </div>
+        </div>
+
+        <div class="subsonic-field-card">
+          <div class="subsonic-field-label">Password / Token</div>
+          <div class="subsonic-input-wrap">
+            <input type="text" class="subsonic-field-input" id="subsonic-input-pass" readonly value="songbuddy">
+            <button type="button" class="subsonic-copy-btn" id="btn-copy-subsonic-pass" title="Copy Password">Copy</button>
+          </div>
+        </div>
+
+        <div class="subsonic-field-card">
+          <div class="subsonic-field-label">Protocol &amp; Auth</div>
+          <div class="subsonic-input-wrap">
+            <input type="text" class="subsonic-field-input" readonly value="Subsonic v1.16.1 (Token+Salt MD5 / OpenSubsonic)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Compatible Mobile & Desktop Clients Grid -->
+      <div class="subsonic-clients-section">
+        <h4 class="subsonic-section-heading">Compatible 3rd-Party Apps</h4>
+        <div class="subsonic-clients-grid">
+          <div class="subsonic-app-item">
+            <div class="subsonic-app-name">Symfonium</div>
+            <div class="subsonic-app-platform">Android / Android Auto</div>
+            <div class="subsonic-app-desc">Full offline caching, auto-tagging, ReplayGain &amp; widget support.</div>
+          </div>
+          <div class="subsonic-app-item">
+            <div class="subsonic-app-name">Feishin</div>
+            <div class="subsonic-app-platform">Windows / macOS / Linux</div>
+            <div class="subsonic-app-desc">High-fidelity desktop player with custom DSP and lyric view.</div>
+          </div>
+          <div class="subsonic-app-item">
+            <div class="subsonic-app-name">Amperfy</div>
+            <div class="subsonic-app-platform">iOS / Apple CarPlay</div>
+            <div class="subsonic-app-desc">Clean native iOS client with lock-screen widget and streaming.</div>
+          </div>
+          <div class="subsonic-app-item">
+            <div class="subsonic-app-name">DSub / Ultrasonic</div>
+            <div class="subsonic-app-platform">Android / F-Droid</div>
+            <div class="subsonic-app-desc">Open-source client with low memory footprint and background stream.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3-Step Setup Guide -->
+      <div class="subsonic-guide-section">
+        <h4 class="subsonic-section-heading">3-Step Mobile Setup</h4>
+        <div class="subsonic-steps-list">
+          <div class="subsonic-step-item">
+            <span class="subsonic-step-num">1</span>
+            <span class="subsonic-step-text">Install <strong>Symfonium</strong> (Android) or <strong>Amperfy</strong> (iOS) from the app store.</span>
+          </div>
+          <div class="subsonic-step-item">
+            <span class="subsonic-step-num">2</span>
+            <span class="subsonic-step-text">Choose <strong>Add Media Provider &rarr; Subsonic / OpenSubsonic</strong>.</span>
+          </div>
+          <div class="subsonic-step-item">
+            <span class="subsonic-step-num">3</span>
+            <span class="subsonic-step-text">Paste the <strong>Server REST URL</strong> above with username <code>admin</code> and password <code>songbuddy</code>.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subsonic Footer -->
+      <div class="subsonic-footer">
+        <span class="subsonic-footer-spec">Extensions: transcodeOffset, apiKeyAuthentication, formPost, songNotes, lyrics</span>
+        <button type="button" class="subsonic-btn-done" id="btn-done-subsonic">Done</button>
       </div>
     </div>
   </div>
