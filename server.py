@@ -384,6 +384,19 @@ def clean_track_title(raw_title: str, default_artist: str, query: str = "") -> T
 
     return (title or raw_title, artist or default_artist or "Unknown Artist")
 
+def clean_primary_artist(artist_name: Optional[str]) -> str:
+    """
+    Extracts and normalizes the primary lead artist name for similarity & diversity logic.
+    Strips out collaborators, featured artists, brackets, and noisy channel labels.
+    """
+    if not artist_name:
+        return ""
+    cleaned = CHANNEL_CLEANUP_REGEX.sub("", artist_name).strip()
+    primary = re.split(r'[,&/]|(?:\s+[-–—]\s+)|\b(?:feat\.?|ft\.?|with|x|vs\.?)\b', cleaned, flags=re.IGNORECASE)[0]
+    primary = re.sub(r'[\(\[\{].*?[\)\]\}]', '', primary)
+    primary = re.sub(r'^[^\w]+|[^\w]+$', '', primary)
+    return primary.strip().lower()
+
 def has_valid_netscape_cookies(path_or_content: Optional[Union[Path, str]]) -> bool:
     """Ensures a cookie file or string has actual tab-separated cookie entries, not just comments."""
     if not path_or_content:
@@ -795,9 +808,11 @@ def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
         SEARCH_CACHE.set(cache_key, tracks)
         return tracks
 
-def fetch_automix_radio(video_id: str) -> List[Dict[str, Any]]:
-    """Fetches YouTube Music Automix queue with intelligent fallback."""
-    cached = RADIO_CACHE.get(video_id)
+def fetch_automix_radio(video_id: str, seed_artist: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetches YouTube Music Automix queue with artist diversity & related recommendations."""
+    norm_seed_artist = clean_primary_artist(seed_artist)
+    cache_key = f"{video_id}:{norm_seed_artist}" if norm_seed_artist else video_id
+    cached = RADIO_CACHE.get(cache_key)
     if cached:
         return cached
 
@@ -819,7 +834,7 @@ def fetch_automix_radio(video_id: str) -> List[Dict[str, Any]]:
         "User-Agent": USER_AGENT
     }
 
-    tracks = []
+    raw_tracks = []
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=(5.0, 10.0))
         if resp.status_code == 200:
@@ -861,7 +876,7 @@ def fetch_automix_radio(video_id: str) -> List[Dict[str, Any]]:
                     thumbs = v.get("thumbnail", {}).get("thumbnails", [])
                     thumb_url = thumbs[-1].get("url") if thumbs else f"https://i.ytimg.com/vi/{item_id}/hqdefault.jpg"
 
-                    tracks.append({
+                    raw_tracks.append({
                         "id": item_id,
                         "title": cleaned_title,
                         "artist": cleaned_artist,
@@ -874,25 +889,90 @@ def fetch_automix_radio(video_id: str) -> List[Dict[str, Any]]:
         logger.error(f"Error fetching YouTube Music Automix for {video_id}: {e}")
 
     # Exclude seed video itself from recommendations so autoplay won't immediately repeat the current track
-    tracks = [t for t in tracks if t.get("id") and t.get("id") != video_id]
-
-    # Deduplicate tracks while preserving order
-    seen_ids = set()
-    deduped_tracks = []
-    for t in tracks:
+    seen_ids = {video_id}
+    deduped_raw = []
+    for t in raw_tracks:
         tid = t.get("id")
         if tid and tid not in seen_ids:
             seen_ids.add(tid)
-            deduped_tracks.append(t)
-    tracks = deduped_tracks
+            deduped_raw.append(t)
 
-    if len(tracks) < 5:
-        logger.info(f"Automix yielded only {len(tracks)} tracks. Falling back to discovery search.")
-        fallback_tracks = search_tracks("Best Trending Music Hits", limit=20)
-        tracks = tracks + [t for t in fallback_tracks if t["id"] not in [x["id"] for x in tracks] and t["id"] != video_id]
+    # Separate into related artists vs. same artist
+    same_artist_tracks: List[Dict[str, Any]] = []
+    related_artist_tracks: List[Dict[str, Any]] = []
 
-    RADIO_CACHE.set(video_id, tracks)
-    return tracks
+    for t in deduped_raw:
+        art = clean_primary_artist(t.get("artist", ""))
+        if norm_seed_artist and art == norm_seed_artist:
+            same_artist_tracks.append(t)
+        else:
+            related_artist_tracks.append(t)
+
+    # Intelligent related discovery fallback:
+    # If related artists count is low, query for musically similar artists rather than the same singer!
+    if len(related_artist_tracks) < 10:
+        logger.info(f"Automix yielded only {len(related_artist_tracks)} related tracks. Fetching musically related discovery mix.")
+        query = f"{seed_artist} radio mix similar songs" if seed_artist else "Best Trending Music Hits"
+        try:
+            fallback_tracks = search_tracks(query, limit=20)
+            for ft in fallback_tracks:
+                fid = ft.get("id")
+                if fid and fid not in seen_ids:
+                    seen_ids.add(fid)
+                    f_art = clean_primary_artist(ft.get("artist", ""))
+                    if norm_seed_artist and f_art == norm_seed_artist:
+                        same_artist_tracks.append(ft)
+                    else:
+                        related_artist_tracks.append(ft)
+        except Exception as fb_err:
+            logger.warning(f"Discovery search fallback failed: {fb_err}")
+
+    # Diversity Interleaving & Capping:
+    # 1. Enforce max 2 tracks per related artist in primary queue
+    artist_counts: Dict[str, int] = {}
+    capped_related: List[Dict[str, Any]] = []
+    overflow_related: List[Dict[str, Any]] = []
+    for t in related_artist_tracks:
+        art = clean_primary_artist(t.get("artist", "")) or "unknown"
+        cnt = artist_counts.get(art, 0)
+        if cnt < 2:
+            artist_counts[art] = cnt + 1
+            capped_related.append(t)
+        else:
+            overflow_related.append(t)
+
+    # 2. Interleave so no two adjacent songs are by the same artist
+    interleaved: List[Dict[str, Any]] = []
+    pool = list(capped_related)
+    while pool:
+        last_art = clean_primary_artist(interleaved[-1].get("artist", "")) if interleaved else None
+        found_idx = -1
+        for idx, cand in enumerate(pool):
+            cand_art = clean_primary_artist(cand.get("artist", ""))
+            if last_art is None or cand_art != last_art:
+                found_idx = idx
+                break
+        if found_idx != -1:
+            interleaved.append(pool.pop(found_idx))
+        else:
+            interleaved.append(pool.pop(0))
+
+    # 3. Insert AT MOST ONE track by the seed singer at index 3 (or index 2)
+    # The immediate top recommendations (indexes 0, 1, 2) are guaranteed to be DIFFERENT related artists!
+    final_tracks: List[Dict[str, Any]] = list(interleaved)
+    if same_artist_tracks:
+        one_same = same_artist_tracks[0]
+        insert_pos = min(3, len(final_tracks))
+        final_tracks.insert(insert_pos, one_same)
+
+    # 4. Append remaining overflow or later same-artist tracks at the tail (after index 20)
+    for extra in (overflow_related + same_artist_tracks[1:]):
+        if len(final_tracks) >= 50:
+            break
+        final_tracks.append(extra)
+
+    RADIO_CACHE.set(cache_key, final_tracks)
+    return final_tracks
 
 def fetch_lyrics(track_title: str, artist_name: str, duration: Optional[float] = None) -> Dict[str, Any]:
     """Fetches synchronized lyrics from LRCLIB with 2-tier query resolution."""
@@ -1335,9 +1415,10 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         # 3. API: Automix Radio / Up Next Recommendations
         elif path == "/api/radio":
             vid = params.get("id", [""])[0]
+            artist = params.get("artist", [""])[0]
             try:
                 validator = VideoIDValidator(id=vid)
-                tracks = fetch_automix_radio(validator.id)
+                tracks = fetch_automix_radio(validator.id, seed_artist=artist)
                 self.send_json_response(tracks)
             except ValidationError:
                 self.send_json_error(400, "Invalid YouTube video ID parameter format.")

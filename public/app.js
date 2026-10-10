@@ -13,6 +13,8 @@ const state = {
   queue: JSON.parse(localStorage.getItem('songbuddy_queue') || '[]'),
   radioQueue: [],
   radioLoading: false,
+  radioRequestId: 0,
+  sessionPlayedIds: [],
   autoplay: localStorage.getItem('songbuddy_autoplay') !== 'false',
   history: [],
   featuredTracks: [],
@@ -1343,7 +1345,7 @@ function renderQueueDrawer() {
     } else {
       if (autoHeader) autoHeader.style.display = 'none';
       if (state.currentTrack && !state.radioLoading) {
-        loadRadioQueue(state.currentTrack.id);
+        loadRadioQueue(state.currentTrack.id, state.currentTrack.artist);
       }
     }
   }
@@ -1367,11 +1369,26 @@ function renderQueueDrawer() {
 // ============================================================================
 // Audio Engine & Playback
 // ============================================================================
+function cleanPrimaryArtist(artistName) {
+  if (!artistName) return '';
+  const cleaned = String(artistName).replace(/ - Topic|VEVO|Official/gi, '').trim();
+  const primary = cleaned.split(/[,&/]|(?:\s+[-–—]\s+)|\b(?:feat\.?|ft\.?|with|x|vs\.?)\b/i)[0];
+  return primary.replace(/[\(\[\{].*?[\)\]\}]/g, '').replace(/^[^\w]+|[^\w]+$/g, '').trim().toLowerCase();
+}
+
 async function playTrack(track, options = { startRadio: true }) {
   if (!track || !track.id) return;
 
   state.currentTrack = track;
   state.isPlaying = true;
+
+  // Track recent session playback history (up to last 150 played songs) to prevent ping-pong loops
+  if (!Array.isArray(state.sessionPlayedIds)) state.sessionPlayedIds = [];
+  state.sessionPlayedIds = state.sessionPlayedIds.filter(id => id !== track.id);
+  state.sessionPlayedIds.push(track.id);
+  if (state.sessionPlayedIds.length > 150) {
+    state.sessionPlayedIds.shift();
+  }
 
   // Add to history
   if (!state.history.some(t => t.id === track.id)) {
@@ -1450,9 +1467,9 @@ async function playTrack(track, options = { startRadio: true }) {
   // Load lyrics asynchronously
   fetchLyrics(track);
 
-  // Fetch automix recommendations in the background
+  // Fetch automix recommendations in the background seeded by track and artist
   if (options.startRadio) {
-    loadRadioQueue(track.id);
+    loadRadioQueue(track.id, track.artist);
   }
 
   // Update ambient glow with soft color shift
@@ -1639,30 +1656,66 @@ function togglePlayPause() {
 }
 
 function playNextTrack(isManual = false) {
+  const currentId = state.currentTrack?.id;
+  const playedSet = new Set([
+    currentId,
+    ...(state.sessionPlayedIds || []),
+    ...(state.history || []).map(t => t.id)
+  ]);
+
   if (state.queue && state.queue.length > 0) {
-    const next = state.isShuffle
-      ? state.queue.splice(Math.floor(Math.random() * state.queue.length), 1)[0]
-      : state.queue.shift();
+    let nextIndex = 0;
+    if (state.isShuffle) {
+      nextIndex = Math.floor(Math.random() * state.queue.length);
+    }
+    const next = state.queue.splice(nextIndex, 1)[0];
     saveQueueToStorage();
     updateQueueBadge();
     renderQueueDrawer();
-    playTrack(next, { startRadio: false });
-    showToastNotification(`Playing from queue: ${next.title} 🎵`);
-  } else if ((state.autoplay !== false || isManual) && state.radioQueue && state.radioQueue.length > 0) {
-    // Auto Playlist: Seamlessly autoplay next recommended track & keep radio feed flowing
-    const next = state.isShuffle
-      ? state.radioQueue.splice(Math.floor(Math.random() * state.radioQueue.length), 1)[0]
-      : state.radioQueue.shift();
+    if (next) {
+      playTrack(next, { startRadio: false });
+      showToastNotification(`Playing from queue: ${next.title} 🎵`);
+    }
+    return;
+  }
+
+  if ((state.autoplay !== false || isManual) && state.radioQueue && state.radioQueue.length > 0) {
+    // Auto Playlist: Find the first recommendation that is not currentTrack and has not been played recently
+    let nextTrack = null;
+    while (state.radioQueue.length > 0) {
+      const candidate = state.isShuffle
+        ? state.radioQueue.splice(Math.floor(Math.random() * state.radioQueue.length), 1)[0]
+        : state.radioQueue.shift();
+
+      if (candidate && candidate.id && candidate.id !== currentId && !playedSet.has(candidate.id)) {
+        nextTrack = candidate;
+        break;
+      }
+    }
+
     updateQueueBadge();
     renderQueueDrawer();
-    // Pass { startRadio: true } so the new song seeds the next set of recommendations!
-    playTrack(next, { startRadio: true });
-    showToastNotification(`Autoplaying recommendation: ${next.title} 📻`);
-  } else if ((state.autoplay !== false || isManual) && state.featuredTracks.length > 0) {
-    const currentIdx = state.featuredTracks.findIndex(t => t.id === state.currentTrack?.id);
+
+    if (nextTrack) {
+      playTrack(nextTrack, { startRadio: true });
+      showToastNotification(`Autoplaying recommendation: ${nextTrack.title} 📻`);
+      return;
+    }
+  }
+
+  if ((state.autoplay !== false || isManual) && state.featuredTracks && state.featuredTracks.length > 0) {
+    const unplayedFeatured = state.featuredTracks.filter(t => t && t.id && t.id !== currentId && !playedSet.has(t.id));
+    if (unplayedFeatured.length > 0) {
+      playTrack(unplayedFeatured[0], { startRadio: true });
+      return;
+    }
+    const currentIdx = state.featuredTracks.findIndex(t => t.id === currentId);
     const nextIdx = (currentIdx + 1) % state.featuredTracks.length;
     playTrack(state.featuredTracks[nextIdx], { startRadio: true });
-  } else if (state.autoplay === false && !isManual) {
+    return;
+  }
+
+  if (state.autoplay === false && !isManual) {
     state.isPlaying = false;
     updatePlayPauseIcons(false);
   }
@@ -1689,34 +1742,48 @@ function playPrevTrack() {
 // ============================================================================
 // Radio & Automix (Auto Playlist Recommendation Driver)
 // ============================================================================
-async function loadRadioQueue(seedId) {
+async function loadRadioQueue(seedId, seedArtist = '') {
   if (!seedId) return;
+  state.radioRequestId = (state.radioRequestId || 0) + 1;
+  const currentReqId = state.radioRequestId;
   state.radioLoading = true;
   renderQueueDrawer();
 
   try {
-    const res = await fetch(`/api/radio?id=${encodeURIComponent(seedId)}`);
+    const artistQuery = seedArtist || (state.currentTrack && state.currentTrack.artist) || '';
+    const artistParam = artistQuery ? `&artist=${encodeURIComponent(artistQuery)}` : '';
+    const res = await fetch(`/api/radio?id=${encodeURIComponent(seedId)}${artistParam}`);
+    if (currentReqId !== state.radioRequestId) return; // Stale request, discard
     if (!res.ok) {
       state.radioLoading = false;
       renderQueueDrawer();
       return;
     }
     const tracks = await res.json();
+    if (currentReqId !== state.radioRequestId) return;
 
-    // 1. Exclude the seed track itself so it never repeats the current song
-    let filtered = Array.isArray(tracks) ? tracks.filter(t => t && t.id && t.id !== seedId) : [];
+    // 1. Exclude the seed track itself, current playing track, and all session-played tracks
+    const playedSet = new Set([
+      seedId,
+      state.currentTrack?.id,
+      ...(state.sessionPlayedIds || []),
+      ...(state.history || []).map(t => t.id)
+    ]);
+    let filtered = Array.isArray(tracks) ? tracks.filter(t => t && t.id && !playedSet.has(t.id)) : [];
 
-    // 2. Intelligent discovery fallback if automix returns fewer than 6 songs
-    if (filtered.length < 6 && state.currentTrack) {
+    // 2. Intelligent related discovery fallback if automix returns fewer than 8 songs
+    const targetSeedArtist = artistQuery;
+    const normSeedArtist = cleanPrimaryArtist(targetSeedArtist);
+    if (filtered.length < 8 && state.currentTrack) {
       try {
-        const queryTerm = state.currentTrack.artist
-          ? `${state.currentTrack.artist} top hits`
+        const queryTerm = normSeedArtist
+          ? `${targetSeedArtist} radio mix similar songs`
           : 'Trending Music Hits';
         const searchRes = await fetch(`/api/search?q=${encodeURIComponent(queryTerm)}`);
         if (searchRes.ok) {
           const searchData = await searchRes.json();
-          if (Array.isArray(searchData)) {
-            const existingIds = new Set([seedId, ...filtered.map(t => t.id)]);
+          if (Array.isArray(searchData) && currentReqId === state.radioRequestId) {
+            const existingIds = new Set([...playedSet, ...filtered.map(t => t.id)]);
             searchData.forEach(st => {
               if (st && st.id && !existingIds.has(st.id)) {
                 existingIds.add(st.id);
@@ -1730,7 +1797,30 @@ async function loadRadioQueue(seedId) {
       }
     }
 
-    state.radioQueue = filtered;
+    if (currentReqId !== state.radioRequestId) return;
+
+    // 3. Client-side diversity: ensure the immediate next recommendation is a related/different singer
+    if (normSeedArtist && filtered.length > 1) {
+      const firstArtist = cleanPrimaryArtist(filtered[0].artist);
+      if (firstArtist === normSeedArtist) {
+        const swapIdx = filtered.findIndex(t => cleanPrimaryArtist(t.artist) !== normSeedArtist);
+        if (swapIdx > 0) {
+          const [diffTrack] = filtered.splice(swapIdx, 1);
+          filtered.unshift(diffTrack);
+        }
+      }
+    }
+
+    // 4. Non-destructive queue merging: keep upcoming unplayed tracks intact rather than wiping
+    const existingValid = (state.radioQueue || []).filter(t => t && t.id && !playedSet.has(t.id));
+    if (existingValid.length >= 3) {
+      const existingIds = new Set(existingValid.map(t => t.id));
+      const toAdd = filtered.filter(t => !existingIds.has(t.id));
+      state.radioQueue = [...existingValid, ...toAdd].slice(0, 50);
+    } else {
+      state.radioQueue = filtered.slice(0, 50);
+    }
+
     state.radioLoading = false;
 
     // Update Radio Automix view if user navigated there
@@ -1753,8 +1843,10 @@ async function loadRadioQueue(seedId) {
     renderQueueDrawer();
   } catch (err) {
     console.warn('[Automix error]:', err);
-    state.radioLoading = false;
-    renderQueueDrawer();
+    if (currentReqId === state.radioRequestId) {
+      state.radioLoading = false;
+      renderQueueDrawer();
+    }
   }
 }
 
@@ -2161,11 +2253,11 @@ function handleNavigationClick(view) {
       switchView('radio');
       if (!state.radioQueue || state.radioQueue.length === 0) {
         if (state.currentTrack) {
-          loadRadioQueue(state.currentTrack.id);
+          loadRadioQueue(state.currentTrack.id, state.currentTrack.artist);
         } else if (state.featuredTracks.length > 0) {
-          loadRadioQueue(state.featuredTracks[0].id);
+          loadRadioQueue(state.featuredTracks[0].id, state.featuredTracks[0].artist);
         } else {
-          loadRadioQueue(HERO_SLIDES[1].id);
+          loadRadioQueue(HERO_SLIDES[1].id, HERO_SLIDES[1].artist);
         }
       }
       showToastNotification('Continuous Radio Station 📻');

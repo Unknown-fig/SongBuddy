@@ -81,6 +81,19 @@ def test_search_endpoint(client):
     assert isinstance(data, list)
 
 @pytest.mark.integration
+def test_radio_endpoint(client):
+    """Test /api/radio endpoint with seed id and artist parameter"""
+    client.request("GET", "/api/radio?id=dQw4w9WgXcQ&artist=Rick+Astley")
+    response = client.getresponse()
+    assert response.status == 200
+    data = json.loads(response.read().decode("utf-8"))
+    assert isinstance(data, list)
+    if len(data) > 0:
+        assert "id" in data[0]
+        assert "title" in data[0]
+        assert "artist" in data[0]
+
+@pytest.mark.integration
 def test_static_file_serving(client):
     """Test static file serving"""
     client.request("GET", "/")

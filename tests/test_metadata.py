@@ -1,5 +1,5 @@
 import pytest
-from server import is_valid_youtube_id, format_duration, clean_track_title
+from server import is_valid_youtube_id, format_duration, clean_track_title, clean_primary_artist
 
 @pytest.mark.unit
 def test_youtube_id_validation():
@@ -31,3 +31,13 @@ def test_title_cleanup():
     title, artist = clean_track_title("Track [HD]", "Default Artist")
     assert title == "Track"
     assert artist == "Default Artist"
+
+@pytest.mark.unit
+def test_primary_artist_cleanup():
+    """Test primary artist extraction and normalization for recommendation diversity"""
+    assert clean_primary_artist("The Weeknd feat. Daft Punk") == "the weeknd"
+    assert clean_primary_artist("Arijit Singh, Pritam") == "arijit singh"
+    assert clean_primary_artist("Taylor Swift & Bon Iver") == "taylor swift"
+    assert clean_primary_artist("Drake - Topic") == "drake"
+    assert clean_primary_artist("Coldplay x BTS") == "coldplay"
+    assert clean_primary_artist(None) == ""
