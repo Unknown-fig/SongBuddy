@@ -916,6 +916,21 @@
             <p class="library-count" id="liked-count-display">0 tracks saved</p>
           </div>
           <div class="library-hero-actions">
+            <button type="button" class="lib-action-btn" id="btn-create-playlist" title="Create a new custom playlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>New Playlist</span>
+            </button>
+            <button type="button" class="lib-action-btn" id="btn-import-url-playlist" title="Import public Spotify, YouTube, or Apple Music playlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              </svg>
+              <span>Import URL</span>
+            </button>
             <button type="button" class="lib-action-btn" id="btn-export-m3u" title="Export as M3U Playlist">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -938,7 +953,7 @@
                 <line x1="12" y1="20" x2="12" y2="4"></line>
                 <line x1="6" y1="20" x2="6" y2="14"></line>
               </svg>
-              <span>Listening Stats</span>
+              <span>Stats &amp; Health</span>
             </button>
           </div>
         </div>
@@ -946,9 +961,19 @@
         <!-- Library Navigation Sub-Tabs -->
         <div class="library-tabs-nav">
           <button type="button" class="lib-tab-btn active" data-tab="favourites" id="tab-lib-favs">Favourites</button>
+          <button type="button" class="lib-tab-btn" data-tab="custom" id="tab-lib-custom">Playlists</button>
+          <button type="button" class="lib-tab-btn" data-tab="on-repeat" id="tab-lib-on-repeat">On Repeat</button>
           <button type="button" class="lib-tab-btn" data-tab="recent" id="tab-lib-recent">Recently Played</button>
           <button type="button" class="lib-tab-btn" data-tab="most-played" id="tab-lib-most">Most Played</button>
+          <button type="button" class="lib-tab-btn" data-tab="offline" id="tab-lib-offline">Saved Offline</button>
           <button type="button" class="lib-tab-btn" data-tab="local" id="tab-lib-local">Local Audio &amp; ID3</button>
+        </div>
+
+        <!-- Custom User Playlists Grid Shelf (shown when Playlists sub-tab active) -->
+        <div class="custom-playlists-shelf hidden" id="custom-playlists-shelf">
+          <div class="custom-playlists-grid" id="custom-playlists-grid">
+            <!-- Dynamically populated -->
+          </div>
         </div>
 
         <!-- Local Music Dropzone Container (shown when Local tab is selected) -->
@@ -1932,6 +1957,20 @@
             <span class="dsp-hint">Smooth gapless crossfade between tracks</span>
           </div>
 
+          <!-- Audio Stream Quality Selector -->
+          <div class="dsp-card">
+            <div class="dsp-card-header">
+              <span class="dsp-title">Audio Stream Quality</span>
+              <span class="dsp-val-badge" id="audio-quality-val">Studio (160k)</span>
+            </div>
+            <div class="crossfade-pills-row" id="audio-quality-pills-row">
+              <button type="button" class="dsp-pill active" data-quality="high" id="quality-pill-high">Studio (160k)</button>
+              <button type="button" class="dsp-pill" data-quality="low" id="quality-pill-low">Data Saver (64k)</button>
+              <button type="button" class="dsp-pill" data-quality="auto" id="quality-pill-auto">Auto</button>
+            </div>
+            <span class="dsp-hint">High-bitrate M4A/Opus vs bandwidth-saving stream</span>
+          </div>
+
           <!-- Volume Normalization & Bit-Perfect Toggles -->
           <div class="dsp-card dsp-toggles-card">
             <label class="dsp-toggle-row" title="Equalizes song loudness via ReplayGain compressor">
@@ -2173,6 +2212,22 @@
           <span class="stat-label">Top Artist</span>
         </div>
       </div>
+      <!-- Streaming Resilience & Cookie Health Probe -->
+      <div class="stats-resilience-card" id="stats-resilience-card">
+        <div class="resilience-header">
+          <div class="resilience-indicator-wrap">
+            <span class="resilience-indicator-dot healthy" id="cookie-status-dot"></span>
+            <span class="resilience-title">YouTube Extraction &amp; Cookie Health</span>
+          </div>
+          <span class="resilience-badge" id="cookie-status-badge">Checking Probe...</span>
+        </div>
+        <div class="resilience-details" id="cookie-status-details">
+          <div class="resilience-metric">Source: <strong id="cookie-source-label">Embedded</strong></div>
+          <div class="resilience-metric">Expiry: <strong id="cookie-expiry-label">20 days</strong></div>
+          <div class="resilience-metric">Fallback: <strong id="cookie-fallback-label">Piped / Invidious Active</strong></div>
+        </div>
+      </div>
+
       <div class="stats-top-tracks-header">
         <h4 class="stats-section-title">Most Scrobbled Songs</h4>
         <button type="button" class="btn-export-stats" id="btn-export-stats-json">Export JSON</button>
@@ -2183,10 +2238,78 @@
     </div>
   </div>
 
+  <!-- ====================================================================
+       BULK PLAYLIST IMPORTER MODAL
+       ==================================================================== -->
+  <div id="import-playlist-modal" class="shortcuts-modal hidden" aria-modal="true" role="dialog" aria-label="Import Playlist">
+    <div class="shortcuts-backdrop" id="import-playlist-backdrop"></div>
+    <div class="shortcuts-card import-modal-card">
+      <div class="shortcuts-header">
+        <div class="shortcuts-header-title">
+          <span class="shortcuts-icon">🌐</span>
+          <div>
+            <h3 class="shortcuts-title">Bulk Playlist Importer</h3>
+            <p class="shortcuts-sub">Resolve Spotify, YouTube, or Apple Music playlists directly</p>
+          </div>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-import-modal">&times;</button>
+      </div>
+      <div class="import-modal-body">
+        <label for="import-playlist-url" class="import-label">Public Playlist or Album URL</label>
+        <div class="import-input-wrap">
+          <input type="url" id="import-playlist-url" class="import-input" placeholder="https://open.spotify.com/playlist/... or YouTube / Apple Music link" autocomplete="off">
+        </div>
+        <div class="import-source-badges">
+          <span class="import-badge">✨ Spotify</span>
+          <span class="import-badge">⚡ YouTube</span>
+          <span class="import-badge">🍎 Apple Music</span>
+        </div>
+        <div class="import-status-message hidden" id="import-status-msg"></div>
+        <div class="import-actions-row">
+          <button type="button" class="btn-import-cancel" id="btn-import-cancel">Cancel</button>
+          <button type="button" class="btn-import-submit" id="btn-import-submit">Import Tracks</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       CREATE CUSTOM PLAYLIST MODAL
+       ==================================================================== -->
+  <div id="create-playlist-modal" class="shortcuts-modal hidden" aria-modal="true" role="dialog" aria-label="Create Custom Playlist">
+    <div class="shortcuts-backdrop" id="create-playlist-backdrop"></div>
+    <div class="shortcuts-card import-modal-card">
+      <div class="shortcuts-header">
+        <div class="shortcuts-header-title">
+          <span class="shortcuts-icon">📁</span>
+          <div>
+            <h3 class="shortcuts-title">Create Custom Playlist</h3>
+            <p class="shortcuts-sub">Build a personal playlist saved to your library</p>
+          </div>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-create-playlist">&times;</button>
+      </div>
+      <div class="import-modal-body">
+        <label for="create-playlist-name" class="import-label">Playlist Name</label>
+        <div class="import-input-wrap">
+          <input type="text" id="create-playlist-name" class="import-input" placeholder="e.g., Midnight Synthwave Focus" autocomplete="off">
+        </div>
+        <label for="create-playlist-desc" class="import-label" style="margin-top:14px;">Description (Optional)</label>
+        <div class="import-input-wrap">
+          <input type="text" id="create-playlist-desc" class="import-input" placeholder="e.g., Deep focus coding tracks" autocomplete="off">
+        </div>
+        <div class="import-actions-row">
+          <button type="button" class="btn-import-cancel" id="btn-create-playlist-cancel">Cancel</button>
+          <button type="button" class="btn-import-submit" id="btn-create-playlist-submit">Create Playlist</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- YouTube IFrame API -->
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=52"></script>
+  <script src="app.js?v=53"></script>
 </body>
 </html>

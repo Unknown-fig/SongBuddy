@@ -53,9 +53,13 @@ const state = {
     crossfadeSeconds: parseInt(localStorage.getItem('songbuddy_crossfade') || '0', 10),
     audiophilePassthrough: localStorage.getItem('songbuddy_audiophile') === 'true',
     showRemainingTime: localStorage.getItem('songbuddy_show_remaining') === 'true',
-    repeatMode: localStorage.getItem('songbuddy_repeat_mode') || 'off' // 'off' | 'all' | 'one'
+    repeatMode: localStorage.getItem('songbuddy_repeat_mode') || 'off', // 'off' | 'all' | 'one'
+    quality: localStorage.getItem('songbuddy_quality') || 'high' // 'high' | 'low' | 'auto'
   },
   localLibrary: [],
+  userPlaylists: [],
+  smartPlaylists: { on_repeat: [], recently_played: [], jump_back_in: [] },
+  offlineTracks: [],
   activeLibraryTab: 'favourites',
   listeningStats: JSON.parse(localStorage.getItem('songbuddy_listening_stats') || '{"tracksPlayed":0,"totalMinutes":0,"playCounts":{}}')
 };
@@ -628,6 +632,11 @@ async function initApp() {
   initPWA();
   initAudioSuiteUI();
 
+  // Initialize IndexedDB Offline Storage & Synchronize User Library
+  OfflineDB.init().catch(console.warn);
+  syncUserLibrary().catch(console.warn);
+  setAudioQuality(state.audioEngine.quality || 'high');
+
   // Load live trending tracks from server
   await loadTrendingTracks();
   renderLikedTracks();
@@ -751,6 +760,13 @@ function createTrackRow(track, rankNumber) {
       <span class="chart-artist">${escapeHTML(track.artist)}</span>
     </div>
     <span class="chart-time">${duration}</span>
+    <button class="chart-offline-btn" title="Download for Offline Play" aria-label="Save Offline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+    </button>
     <button class="chart-queue-btn" title="Add to Queue" aria-label="Add to Queue">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
         <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -763,6 +779,13 @@ function createTrackRow(track, rankNumber) {
       </svg>
     </button>
   `;
+
+  // Attach offline download listener
+  const offlineBtn = row.querySelector('.chart-offline-btn');
+  offlineBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    OfflineDB.saveTrack(track);
+  });
 
   // Attach queue button listener with stopPropagation to prevent auto-play
   const queueBtn = row.querySelector('.chart-queue-btn');
@@ -1401,7 +1424,8 @@ async function playTrack(track, options = { startRadio: true }) {
       startYTProgressTracker();
     } else {
       pendingYTTrack = track;
-      const streamUrl = `/api/stream?id=${encodeURIComponent(track.id)}`;
+      const q = (state.audioEngine && state.audioEngine.quality) || 'high';
+      const streamUrl = track.offlineBlobUrl || track.streamUrl || `/api/stream?id=${encodeURIComponent(track.id)}&quality=${q}`;
       audio.src = streamUrl;
       audio.load();
       audio.play().then(() => updatePlayPauseIcons(true)).catch(console.warn);
@@ -1410,7 +1434,8 @@ async function playTrack(track, options = { startRadio: true }) {
     isYTActive = false;
     stopYTProgressTracker();
     if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
-    const streamUrl = track.streamUrl || `/api/stream?id=${encodeURIComponent(track.id)}`;
+    const q = (state.audioEngine && state.audioEngine.quality) || 'high';
+    const streamUrl = track.offlineBlobUrl || track.streamUrl || `/api/stream?id=${encodeURIComponent(track.id)}&quality=${q}`;
     audio.src = streamUrl;
     audio.load();
     try {
@@ -2269,7 +2294,7 @@ function renderLibraryHistory() {
 }
 
 // ============================================================================
-// Multi-Tab Library Management Hub (Favourites, Recent, Most Played, Local ID3)
+// Multi-Tab Library Management Hub (Favourites, Playlists, On Repeat, Recent, Most Played, Offline, Local)
 // ============================================================================
 function switchLibraryTab(tabName) {
   state.activeLibraryTab = tabName;
@@ -2282,6 +2307,11 @@ function switchLibraryTab(tabName) {
     dropzoneWrap.classList.toggle('hidden', tabName !== 'local');
   }
 
+  const customShelf = $('custom-playlists-shelf');
+  if (customShelf) {
+    customShelf.classList.toggle('hidden', tabName !== 'custom');
+  }
+
   const headingTitle = $('library-heading-title');
   const heroTag = $('library-hero-tag');
 
@@ -2289,6 +2319,14 @@ function switchLibraryTab(tabName) {
     if (headingTitle) headingTitle.textContent = 'Liked Songs';
     if (heroTag) heroTag.textContent = 'PERSONAL COLLECTION';
     renderLikedTracks();
+  } else if (tabName === 'custom') {
+    if (headingTitle) headingTitle.textContent = 'Custom Playlists';
+    if (heroTag) heroTag.textContent = 'SAVED PLAYLISTS';
+    renderCustomPlaylistsShelf();
+  } else if (tabName === 'on-repeat') {
+    if (headingTitle) headingTitle.textContent = 'On Repeat';
+    if (heroTag) heroTag.textContent = 'SMART AUTO-GENERATED';
+    renderOnRepeatTracks();
   } else if (tabName === 'recent') {
     if (headingTitle) headingTitle.textContent = 'Recently Played';
     if (heroTag) heroTag.textContent = 'PLAYBACK HISTORY';
@@ -2297,10 +2335,528 @@ function switchLibraryTab(tabName) {
     if (headingTitle) headingTitle.textContent = 'Most Played';
     if (heroTag) heroTag.textContent = 'TOP SCROBBLES';
     renderMostPlayedTracks();
+  } else if (tabName === 'offline') {
+    if (headingTitle) headingTitle.textContent = 'Saved Offline';
+    if (heroTag) heroTag.textContent = 'OFFLINE CACHE (INDEXEDDB)';
+    renderOfflineTracks();
   } else if (tabName === 'local') {
     if (headingTitle) headingTitle.textContent = 'Local Audio Files';
     if (heroTag) heroTag.textContent = 'ID3 TAG & OFFLINE STUDIO';
     renderLocalLibraryTracks();
+  }
+}
+
+// ============================================================================
+// IndexedDB Offline Cache Engine ("SongBuddyOfflineDB")
+// ============================================================================
+const OfflineDB = {
+  db: null,
+  async init() {
+    if (this.db) return this.db;
+    return new Promise((resolve) => {
+      if (!window.indexedDB) {
+        console.warn('[OfflineDB] IndexedDB not supported by client.');
+        resolve(null);
+        return;
+      }
+      const request = indexedDB.open('songbuddy_offline_db', 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('offline_tracks')) {
+          const store = db.createObjectStore('offline_tracks', { keyPath: 'id' });
+          store.createIndex('savedAt', 'savedAt', { unique: false });
+        }
+      };
+      request.onsuccess = (e) => {
+        this.db = e.target.result;
+        resolve(this.db);
+      };
+      request.onerror = (e) => {
+        console.warn('[OfflineDB init error]:', e);
+        resolve(null);
+      };
+    });
+  },
+
+  async saveTrack(track) {
+    const db = await this.init();
+    if (!db) return false;
+    try {
+      showToastNotification(`Downloading "${track.title}" for offline playback...`);
+      const q = (state.audioEngine && state.audioEngine.quality) || 'high';
+      const streamUrl = track.streamUrl || `/api/stream?id=${encodeURIComponent(track.id)}&quality=${q}`;
+      const res = await fetch(streamUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+
+      const item = {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album || 'Single',
+        duration: track.duration || 0,
+        duration_formatted: track.duration_formatted || formatTime(track.duration || 0),
+        thumbnail: track.thumbnail || '',
+        audioBlob: blob,
+        mimeType: blob.type || 'audio/webm',
+        savedAt: Date.now()
+      };
+
+      return new Promise((resolve) => {
+        const tx = db.transaction('offline_tracks', 'readwrite');
+        const store = tx.objectStore('offline_tracks');
+        store.put(item);
+        tx.oncomplete = () => {
+          showToastNotification(`"${track.title}" saved offline! 🎧`);
+          if (state.activeLibraryTab === 'offline') renderOfflineTracks();
+          resolve(true);
+        };
+        tx.onerror = () => resolve(false);
+      });
+    } catch (err) {
+      console.warn('[Offline save failed]:', err);
+      showToastNotification(`Offline caching failed: ${err.message}`, 4000);
+      return false;
+    }
+  },
+
+  async getTracks() {
+    const db = await this.init();
+    if (!db) return [];
+    return new Promise((resolve) => {
+      const tx = db.transaction('offline_tracks', 'readonly');
+      const store = tx.objectStore('offline_tracks');
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  },
+
+  async deleteTrack(trackId) {
+    const db = await this.init();
+    if (!db) return false;
+    return new Promise((resolve) => {
+      const tx = db.transaction('offline_tracks', 'readwrite');
+      const store = tx.objectStore('offline_tracks');
+      store.delete(trackId);
+      tx.oncomplete = () => {
+        showToastNotification('Removed track from offline storage.');
+        if (state.activeLibraryTab === 'offline') renderOfflineTracks();
+        resolve(true);
+      };
+      tx.onerror = () => resolve(false);
+    });
+  }
+};
+
+// ============================================================================
+// Server-Synchronized User Library & Persistence
+// ============================================================================
+async function syncUserLibrary() {
+  const token = localStorage.getItem('songbuddy_token');
+  const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+  try {
+    // 1. Fetch custom playlists
+    const plRes = await fetch('/api/user/playlists', { headers });
+    if (plRes.ok) {
+      state.userPlaylists = await plRes.json();
+    }
+
+    // 2. Fetch favorites
+    const favRes = await fetch('/api/user/favorites', { headers });
+    if (favRes.ok) {
+      const serverFavs = await favRes.json();
+      if (serverFavs && serverFavs.length > 0) {
+        state.likedTracks = serverFavs;
+        localStorage.setItem('songbuddy_liked_tracks', JSON.stringify(serverFavs));
+        updateLikedCountDisplay();
+      }
+    }
+
+    // 3. Fetch smart playlists ("On Repeat", "Recently Played", "Jump Back In")
+    const smartRes = await fetch('/api/user/smart-playlists', { headers });
+    if (smartRes.ok) {
+      state.smartPlaylists = await smartRes.json();
+    }
+  } catch (err) {
+    console.debug('[User library sync notice]:', err);
+  }
+}
+
+function renderCustomPlaylistsShelf() {
+  const shelf = $('custom-playlists-shelf');
+  const grid = $('custom-playlists-grid');
+  const list = $('liked-tracks-list');
+  if (shelf) shelf.classList.remove('hidden');
+  if (list) list.innerHTML = '';
+
+  const playlists = state.userPlaylists || [];
+  if ($('liked-count-display')) {
+    $('liked-count-display').textContent = `${playlists.length} playlists created`;
+  }
+
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  if (playlists.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align:center; padding: 48px 16px; color: var(--text-secondary);">
+        <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">No custom playlists yet</p>
+        <p style="font-size: 0.88rem; opacity: 0.8; margin-bottom: 16px;">Create your own playlist or import one from Spotify, YouTube, or Apple Music!</p>
+        <button type="button" class="btn-import-submit" onclick="openCreatePlaylistModal()">+ Create Playlist</button>
+      </div>
+    `;
+    return;
+  }
+
+  playlists.forEach(pl => {
+    const card = document.createElement('div');
+    card.className = 'playlist-card-custom';
+    const thumb = pl.cover_url || (pl.tracks && pl.tracks[0]?.thumbnail) || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80';
+    const count = pl.track_count !== undefined ? pl.track_count : (pl.tracks ? pl.tracks.length : 0);
+
+    card.innerHTML = `
+      <img src="${thumb}" alt="${escapeHTML(pl.name)}" class="custom-pl-thumb" onerror="this.src='https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80';">
+      <span class="custom-pl-title">${escapeHTML(pl.name)}</span>
+      <span class="custom-pl-sub">${count} tracks • ${escapeHTML(pl.description || 'Personal Mix')}</span>
+      <div class="custom-pl-actions">
+        <button type="button" class="btn-custom-pl-play" title="Play Playlist">▶ Play</button>
+        <button type="button" class="btn-custom-pl-del" title="Delete Playlist">✕</button>
+      </div>
+    `;
+
+    card.querySelector('.btn-custom-pl-play')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (pl.tracks && pl.tracks.length > 0) {
+        state.queue = [...pl.tracks];
+        saveQueueToStorage();
+        renderQueueDrawer();
+        playTrack(pl.tracks[0]);
+        showToastNotification(`Playing playlist "${pl.name}"`);
+      } else {
+        showToastNotification('Playlist is empty.');
+      }
+    });
+
+    card.querySelector('.btn-custom-pl-del')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteCustomPlaylist(pl.id, pl.name);
+    });
+
+    card.addEventListener('click', () => {
+      if (pl.tracks && pl.tracks.length > 0) {
+        state.queue = [...pl.tracks];
+        saveQueueToStorage();
+        renderQueueDrawer();
+        playTrack(pl.tracks[0]);
+      }
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+async function deleteCustomPlaylist(plId, plName) {
+  if (!confirm(`Delete playlist "${plName}"?`)) return;
+  const token = localStorage.getItem('songbuddy_token');
+  const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+
+  try {
+    const res = await fetch(`/api/user/playlists/delete`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: plId })
+    });
+    if (res.ok) {
+      state.userPlaylists = (state.userPlaylists || []).filter(p => p.id !== plId);
+      renderCustomPlaylistsShelf();
+      showToastNotification(`Deleted playlist "${plName}".`);
+    }
+  } catch (err) {
+    showToastNotification('Error deleting playlist.');
+  }
+}
+
+function renderOnRepeatTracks() {
+  const container = $('liked-tracks-list');
+  const shelf = $('custom-playlists-shelf');
+  if (shelf) shelf.classList.add('hidden');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const tracks = (state.smartPlaylists && state.smartPlaylists.on_repeat) || [];
+  if ($('liked-count-display')) {
+    $('liked-count-display').textContent = `${tracks.length} heavy rotation tracks`;
+  }
+
+  if (tracks.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding: 48px 16px; color: var(--text-secondary);">
+        <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">No repeat tracks yet</p>
+        <p style="font-size: 0.88rem; opacity: 0.8;">Play songs at least twice and SongBuddy will automatically generate your "On Repeat" heavy rotation!</p>
+      </div>
+    `;
+    return;
+  }
+
+  tracks.forEach((track, index) => {
+    const row = createTrackRow(track, index + 1);
+    container.appendChild(row);
+  });
+}
+
+async function renderOfflineTracks() {
+  const container = $('liked-tracks-list');
+  const shelf = $('custom-playlists-shelf');
+  if (shelf) shelf.classList.add('hidden');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const tracks = await OfflineDB.getTracks();
+  if ($('liked-count-display')) {
+    $('liked-count-display').textContent = `${tracks.length} tracks cached for offline`;
+  }
+
+  if (tracks.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding: 48px 16px; color: var(--text-secondary);">
+        <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">No offline songs downloaded</p>
+        <p style="font-size: 0.88rem; opacity: 0.8;">Click the download icon (⬇) on any track row to save it directly into device IndexedDB storage for offline playback!</p>
+      </div>
+    `;
+    return;
+  }
+
+  tracks.forEach((track, index) => {
+    // Attach offline blob URL for seamless zero-network playback
+    const offlineItem = {
+      ...track,
+      offlineBlobUrl: URL.createObjectURL(track.audioBlob)
+    };
+    const row = createTrackRow(offlineItem, index + 1);
+    container.appendChild(row);
+  });
+}
+
+// ============================================================================
+// Bulk Playlist Importer Modal Handlers
+// ============================================================================
+function openImportPlaylistModal() {
+  const modal = $('import-playlist-modal');
+  if (modal) modal.classList.remove('hidden');
+  const input = $('import-playlist-url');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  const msg = $('import-status-msg');
+  if (msg) msg.classList.add('hidden');
+}
+
+function closeImportPlaylistModal() {
+  const modal = $('import-playlist-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function handleImportPlaylistSubmit() {
+  const input = $('import-playlist-url');
+  const msg = $('import-status-msg');
+  const btn = $('btn-import-submit');
+  const url = (input ? input.value : '').trim();
+
+  if (!url) {
+    if (msg) {
+      msg.textContent = 'Please enter a valid Spotify, YouTube, or Apple Music link.';
+      msg.className = 'import-status-message error';
+      msg.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+  }
+  if (msg) {
+    msg.textContent = 'Resolving tracklist & metadata...';
+    msg.className = 'import-status-message';
+    msg.classList.remove('hidden');
+  }
+
+  try {
+    const res = await fetch('/api/import/playlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || data.message || 'Import failed');
+
+    const tracks = data.tracks || [];
+    if (tracks.length === 0) throw new Error('No playable tracks found in playlist.');
+
+    const newPlaylist = {
+      name: data.title || 'Imported Playlist',
+      description: `Imported from ${data.source ? data.source.toUpperCase() : 'URL'} (${tracks.length} tracks)`,
+      tracks: tracks
+    };
+
+    const token = localStorage.getItem('songbuddy_token');
+    const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+
+    const saveRes = await fetch('/api/user/playlists', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(newPlaylist)
+    });
+    if (saveRes.ok) {
+      const saved = await saveRes.json();
+      state.userPlaylists = state.userPlaylists || [];
+      state.userPlaylists.unshift(saved);
+    }
+
+    if (state.queue.length === 0) {
+      state.queue = [...tracks];
+      saveQueueToStorage();
+      renderQueueDrawer();
+    }
+
+    if (msg) {
+      msg.textContent = `Successfully imported "${data.title}" with ${tracks.length} tracks!`;
+      msg.className = 'import-status-message success';
+    }
+
+    showToastNotification(`Imported ${tracks.length} tracks from ${data.source.toUpperCase()}! 🎶`);
+    setTimeout(() => {
+      closeImportPlaylistModal();
+      switchLibraryTab('custom');
+    }, 1200);
+
+  } catch (err) {
+    console.warn('[Import error]:', err);
+    if (msg) {
+      msg.textContent = err.message || 'Failed to import playlist.';
+      msg.className = 'import-status-message error';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Import Tracks';
+    }
+  }
+}
+
+// ============================================================================
+// Create Custom Playlist Modal Handlers
+// ============================================================================
+function openCreatePlaylistModal() {
+  const modal = $('create-playlist-modal');
+  if (modal) modal.classList.remove('hidden');
+  const nameInput = $('create-playlist-name');
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.focus();
+  }
+  const descInput = $('create-playlist-desc');
+  if (descInput) descInput.value = '';
+}
+
+function closeCreatePlaylistModal() {
+  const modal = $('create-playlist-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function handleCreatePlaylistSubmit() {
+  const nameInput = $('create-playlist-name');
+  const descInput = $('create-playlist-desc');
+  const name = (nameInput ? nameInput.value : '').trim();
+  const desc = (descInput ? descInput.value : '').trim();
+
+  if (!name) {
+    showToastNotification('Please provide a playlist name');
+    return;
+  }
+
+  const newPl = {
+    name: name,
+    description: desc,
+    tracks: []
+  };
+
+  const token = localStorage.getItem('songbuddy_token');
+  const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+
+  try {
+    const res = await fetch('/api/user/playlists', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(newPl)
+    });
+    if (res.ok) {
+      const saved = await res.json();
+      state.userPlaylists = state.userPlaylists || [];
+      state.userPlaylists.unshift(saved);
+      showToastNotification(`Created playlist "${name}"!`);
+      closeCreatePlaylistModal();
+      switchLibraryTab('custom');
+    }
+  } catch (err) {
+    console.warn('[Create playlist error]:', err);
+    showToastNotification('Failed to create playlist');
+  }
+}
+
+// ============================================================================
+// Audio Stream Quality Selection
+// ============================================================================
+function setAudioQuality(quality) {
+  state.audioEngine.quality = quality;
+  localStorage.setItem('songbuddy_quality', quality);
+
+  const valBadge = $('audio-quality-val');
+  if (valBadge) {
+    if (quality === 'low') valBadge.textContent = 'Data Saver (64k)';
+    else if (quality === 'high') valBadge.textContent = 'Studio (160k)';
+    else valBadge.textContent = 'Auto (Adaptive)';
+  }
+
+  document.querySelectorAll('#audio-quality-pills-row .dsp-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.quality === quality);
+  });
+
+  showToastNotification(`Audio stream quality: ${quality === 'low' ? 'Data Saver (64k Opus)' : (quality === 'high' ? 'Studio Hi-Fi (160k)' : 'Auto Adaptive')}`);
+}
+
+// ============================================================================
+// Streaming Resilience & Cookie Health Check
+// ============================================================================
+async function checkStreamingResilienceHealth() {
+  const dot = $('cookie-status-dot');
+  const badge = $('cookie-status-badge');
+  const sourceLabel = $('cookie-source-label');
+  const expiryLabel = $('cookie-expiry-label');
+  const fallbackLabel = $('cookie-fallback-label');
+
+  try {
+    const res = await fetch('/api/health');
+    if (res.ok) {
+      const data = await res.json();
+      const ch = data.cookie_health || {};
+      const status = ch.status || 'healthy';
+
+      if (dot) {
+        dot.className = `resilience-indicator-dot ${status === 'healthy' ? 'healthy' : (status === 'expiring_soon' ? 'warning' : 'expired')}`;
+      }
+      if (badge) {
+        badge.textContent = status === 'healthy' ? 'Session Healthy' : (status === 'expiring_soon' ? 'Expiring Soon' : 'Bypass Active');
+      }
+      if (sourceLabel) sourceLabel.textContent = ch.source ? ch.source.toUpperCase() : 'EMBEDDED';
+      if (expiryLabel) expiryLabel.textContent = ch.days_remaining ? `${ch.days_remaining} days remaining` : 'Persistent';
+      if (fallbackLabel) fallbackLabel.textContent = 'Piped / Invidious Active';
+    }
+  } catch (err) {
+    if (badge) badge.textContent = 'Local Standalone';
   }
 }
 
@@ -2723,11 +3279,21 @@ function recordTrackListeningTelemetry(track, cur, dur) {
     state.listeningStats.playCounts[key] = (state.listeningStats.playCounts[key] || 0) + 1;
     localStorage.setItem('songbuddy_listening_stats', JSON.stringify(state.listeningStats));
     updateStatsUI();
+
+    // Persist to server user history for smart playlists
+    const token = localStorage.getItem('songbuddy_token');
+    const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+    fetch('/api/user/history', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ track })
+    }).catch(() => {});
   }
 }
 
 function openStatsModal() {
   updateStatsUI();
+  checkStreamingResilienceHealth();
   $('stats-modal')?.classList.remove('hidden');
 }
 
@@ -4607,6 +5173,25 @@ function setupEventListeners() {
   // Custom LRC Lyrics Import Listeners
   $('btn-load-custom-lrc')?.addEventListener('click', () => $('lrc-file-input')?.click());
   $('lrc-file-input')?.addEventListener('change', (e) => handleCustomLrcImport(e.target.files[0]));
+
+  // Audio Quality Pills Listeners
+  document.querySelectorAll('#audio-quality-pills-row .dsp-pill').forEach(btn => {
+    btn.addEventListener('click', () => setAudioQuality(btn.dataset.quality));
+  });
+
+  // Custom Playlist Modal Listeners
+  $('btn-create-playlist')?.addEventListener('click', openCreatePlaylistModal);
+  $('btn-close-create-playlist')?.addEventListener('click', closeCreatePlaylistModal);
+  $('btn-create-playlist-cancel')?.addEventListener('click', closeCreatePlaylistModal);
+  $('create-playlist-backdrop')?.addEventListener('click', closeCreatePlaylistModal);
+  $('btn-create-playlist-submit')?.addEventListener('click', handleCreatePlaylistSubmit);
+
+  // Bulk Playlist Importer Modal Listeners
+  $('btn-import-url-playlist')?.addEventListener('click', openImportPlaylistModal);
+  $('btn-close-import-modal')?.addEventListener('click', closeImportPlaylistModal);
+  $('btn-import-cancel')?.addEventListener('click', closeImportPlaylistModal);
+  $('import-playlist-backdrop')?.addEventListener('click', closeImportPlaylistModal);
+  $('btn-import-submit')?.addEventListener('click', handleImportPlaylistSubmit);
 
   // Library Navigation Sub-Tabs
   document.querySelectorAll('.lib-tab-btn').forEach(btn => {

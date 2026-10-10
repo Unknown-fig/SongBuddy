@@ -20,6 +20,8 @@ users.json
 revoked_tokens.json
 cookies.txt
 *cookie*.txt
+*.db
+library_backup.json
 
 # Test & Coverage artifacts
 .pytest_cache/

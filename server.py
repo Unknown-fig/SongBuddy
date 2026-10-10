@@ -36,6 +36,8 @@ from validators import (
     UserCredentialsValidator
 )
 from rate_limiter import AdvancedRateLimiter
+from library_store import library_store
+from importer import import_playlist_by_url
 
 # Track server start time
 SERVER_START_TIME = time.time()
@@ -404,10 +406,174 @@ def has_valid_netscape_cookies(path_or_content: Optional[Union[Path, str]]) -> b
         pass
     return False
 
-def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, Any]:
-    """Resolves direct audio stream URL with clean zero-cookie extraction & double-checked caching."""
+def get_cookie_health_status() -> Dict[str, Any]:
+    """Automated probe inspecting YouTube session cookies, validity, and expiry horizons."""
+    raw_cookies = os.getenv("YOUTUBE_COOKIES")
+    raw_cookies_b64 = os.getenv("YOUTUBE_COOKIES_B64")
+    source = "none"
+    cookie_text = None
+
+    if raw_cookies_b64 and not raw_cookies:
+        try:
+            import base64
+            cookie_text = base64.b64decode(raw_cookies_b64.strip()).decode("utf-8", errors="ignore")
+            source = "env_b64"
+        except Exception:
+            pass
+    elif raw_cookies:
+        cookie_text = raw_cookies
+        source = "env_raw"
+
+    if not cookie_text:
+        try:
+            from cookies_data import EMBEDDED_COOKIES
+            if EMBEDDED_COOKIES and has_valid_netscape_cookies(EMBEDDED_COOKIES):
+                cookie_text = EMBEDDED_COOKIES
+                source = "embedded"
+        except ImportError:
+            pass
+
+    if not cookie_text:
+        candidate = Path("/tmp/youtube_cookies.txt") if os.getenv("VERCEL") else BASE_DIR / "cookies.txt"
+        if candidate.exists() and has_valid_netscape_cookies(candidate):
+            try:
+                cookie_text = candidate.read_text(encoding="utf-8", errors="ignore")
+                source = "file"
+            except Exception:
+                pass
+
+    if not cookie_text:
+        return {
+            "status": "missing",
+            "source": "none",
+            "entries_count": 0,
+            "earliest_expiry": None,
+            "days_remaining": 0,
+            "authenticated": False,
+            "message": "No YouTube cookies configured. Operating with native mobile client bypass."
+        }
+
+    valid_entries = 0
+    expiries = []
+    has_auth_cookie = False
+
+    for line in cookie_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7:
+            valid_entries += 1
+            cookie_name = parts[5]
+            if cookie_name in ("LOGIN_INFO", "SID", "SSID", "__Secure-3PAPISID", "__Secure-1PSID"):
+                has_auth_cookie = True
+            try:
+                exp_ts = int(parts[4])
+                if exp_ts > 0:
+                    expiries.append(exp_ts)
+            except (ValueError, TypeError):
+                pass
+
+    now_ts = int(time.time())
+    if expiries:
+        earliest_exp = min(expiries)
+        days_left = round((earliest_exp - now_ts) / 86400, 1)
+        if days_left < 0:
+            status = "expired"
+        elif days_left < 7:
+            status = "expiring_soon"
+        else:
+            status = "healthy"
+        exp_iso = datetime.fromtimestamp(earliest_exp, tz=timezone.utc).isoformat()
+    else:
+        status = "healthy" if valid_entries > 0 else "missing"
+        days_left = 999.0
+        exp_iso = None
+
+    return {
+        "status": status,
+        "source": source,
+        "authenticated": has_auth_cookie,
+        "entries_count": valid_entries,
+        "earliest_expiry": exp_iso,
+        "days_remaining": days_left,
+        "message": f"Cookie probe reports status: {status} ({days_left} days remaining, {valid_entries} entries)"
+    }
+
+def resolve_stream_fallback(video_id: str, quality: str = "high") -> Optional[Dict[str, Any]]:
+    """Secondary audio resolver querying high-availability Piped API and Invidious public instances."""
+    piped_instances = [
+        "https://pipedapi.kavin.rocks",
+        "https://api.piped.privacy.com.de",
+        "https://piped-api.lunar.icu"
+    ]
+    for instance in piped_instances:
+        try:
+            resp = HTTP_SESSION.get(f"{instance}/streams/{video_id}", timeout=(3.0, 5.0))
+            if resp.status_code == 200:
+                data = resp.json()
+                audio_streams = data.get("audioStreams", [])
+                if audio_streams:
+                    if quality == "low":
+                        audio_streams.sort(key=lambda s: s.get("bitrate", 0))
+                    else:
+                        audio_streams.sort(key=lambda s: s.get("bitrate", 0), reverse=True)
+                    best = audio_streams[0]
+                    raw_title = data.get("title", "Unknown Track")
+                    raw_uploader = data.get("uploader", "Unknown Artist")
+                    cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_uploader)
+                    logger.info(f"Resolved secondary fallback audio via Piped for video {video_id}")
+                    return {
+                        "stream_url": best["url"],
+                        "title": cleaned_title,
+                        "artist": cleaned_artist,
+                        "duration": data.get("duration"),
+                        "acodec": best.get("codec", "opus"),
+                        "abr": (best.get("bitrate", 128000) // 1000) if best.get("bitrate") else 128,
+                        "ext": best.get("format", "webm"),
+                        "source": "piped_fallback"
+                    }
+        except Exception as pe:
+            logger.debug(f"Piped fallback via {instance} failed: {pe}")
+            continue
+
+    # Second fallback: Invidious API
+    invidious_instances = [
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de"
+    ]
+    for instance in invidious_instances:
+        try:
+            resp = HTTP_SESSION.get(f"{instance}/api/v1/videos/{video_id}", timeout=(3.0, 5.0))
+            if resp.status_code == 200:
+                data = resp.json()
+                adaptive = data.get("adaptiveFormats", [])
+                audio_formats = [f for f in adaptive if "audio" in f.get("type", "").lower()]
+                if audio_formats:
+                    audio_formats.sort(key=lambda f: int(f.get("bitrate", 0)), reverse=(quality != "low"))
+                    best = audio_formats[0]
+                    cleaned_title, cleaned_artist = clean_track_title(data.get("title", ""), data.get("author", ""))
+                    logger.info(f"Resolved secondary fallback audio via Invidious for video {video_id}")
+                    return {
+                        "stream_url": best["url"],
+                        "title": cleaned_title,
+                        "artist": cleaned_artist,
+                        "duration": data.get("lengthSeconds"),
+                        "acodec": best.get("audioEncoding", "opus"),
+                        "abr": 128,
+                        "ext": "webm",
+                        "source": "invidious_fallback"
+                    }
+        except Exception:
+            continue
+
+    return None
+
+def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool = False) -> Dict[str, Any]:
+    """Resolves direct audio stream URL with clean zero-cookie extraction, quality selection & secondary fallbacks."""
+    cache_key = f"{video_id}_{quality}"
     if not force_refresh:
-        cached = STREAM_CACHE.get(video_id)
+        cached = STREAM_CACHE.get(cache_key)
         if cached:
             return cached
 
@@ -418,18 +584,20 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
 
     try:
         if not force_refresh:
-            cached = STREAM_CACHE.get(video_id)
+            cached = STREAM_CACHE.get(cache_key)
             if cached:
                 return cached
 
         with EXTRACTION_SEMAPHORE:
             url = f"https://www.youtube.com/watch?v={video_id}"
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'quiet': True,
-                'noplaylist': True,
-                'no_warnings': True,
-            }
+
+            # Audio format specification according to selected quality tier
+            if quality == "low":
+                audio_fmt = "bestaudio[abr<=80]/bestaudio[ext=webm]/bestaudio"
+            elif quality == "high":
+                audio_fmt = "bestaudio[abr>=128]/bestaudio/best"
+            else:
+                audio_fmt = "bestaudio/best"
 
             # Support cookiefile ONLY if valid, authenticated cookies are explicitly provided
             cookie_path = None
@@ -467,10 +635,9 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
             last_err = None
 
             # Attempt 1: Modern mobile/visionos clients (visionos, android) WITHOUT cookies.
-            # (yt-dlp disables android/visionos if cookiefile is set, and these clients bypass bot detection natively)
             try:
                 opts_tier1 = {
-                    'format': 'bestaudio/best',
+                    'format': audio_fmt,
                     'quiet': True,
                     'noplaylist': True,
                     'no_warnings': True,
@@ -488,11 +655,11 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 last_err = e1
                 logger.warning(f"Tier 1 (visionos/android) extraction failed for {video_id}: {e1}")
 
-            # Attempt 2: If Tier 1 failed and cookies are available, try cookie-supporting clients (web_safari, tv, web)
+            # Attempt 2: If Tier 1 failed and cookies are available, try cookie-supporting clients
             if not info and cookie_path and cookie_path.exists():
                 try:
                     opts_tier2 = {
-                        'format': 'bestaudio/best',
+                        'format': audio_fmt,
                         'quiet': True,
                         'noplaylist': True,
                         'no_warnings': True,
@@ -515,7 +682,7 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
             if not info:
                 try:
                     opts_tier3 = {
-                        'format': 'bestaudio/best',
+                        'format': audio_fmt,
                         'quiet': True,
                         'noplaylist': True,
                         'no_warnings': True,
@@ -530,8 +697,16 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                     last_err = e3
                     logger.warning(f"Tier 3 extraction failed for {video_id}: {e3}")
 
+            # Attempt 4: High-Availability Secondary Resolvers (Piped / Invidious)
             if not info:
-                raise RuntimeError(f"All extraction tiers failed: {last_err}")
+                logger.warning(f"All yt-dlp tiers failed for {video_id}. Attempting secondary audio resolvers...")
+                info = resolve_stream_fallback(video_id, quality=quality)
+                if info:
+                    STREAM_CACHE.set(cache_key, info)
+                    return info
+
+            if not info:
+                raise RuntimeError(f"All extraction tiers and secondary resolvers failed: {last_err}")
 
             stream_url = info.get("url") if info else None
             if not stream_url:
@@ -550,7 +725,7 @@ def resolve_stream_url(video_id: str, force_refresh: bool = False) -> Dict[str, 
                 "abr": info.get("abr", 128),
                 "ext": info.get("ext", "m4a")
             }
-            STREAM_CACHE.set(video_id, result)
+            STREAM_CACHE.set(cache_key, result)
             return result
     finally:
         vlock.release()
@@ -820,6 +995,7 @@ def get_system_metrics() -> Dict[str, Any]:
             "demo_account_enabled": user_store.is_demo_account_enabled(),
             "user_count": len(user_store.load_users())
         },
+        "cookie_health": get_cookie_health_status(),
         "active_locks": len(VIDEO_LOCKS)
     }
 
@@ -1021,6 +1197,75 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             self.send_json_response({"message": "Successfully logged out."})
             return
 
+        # 1. Custom User Playlists (Create / Update)
+        elif path == "/api/user/playlists":
+            user = self.authenticate_request() or {"sub": "guest"}
+            pl = library_store.save_user_playlist(user.get("sub", "guest"), post_data)
+            self.send_json_response(pl, status=200)
+            return
+
+        # 2. Custom User Playlists (Delete)
+        elif path == "/api/user/playlists/delete":
+            user = self.authenticate_request() or {"sub": "guest"}
+            pl_id = post_data.get("id", "")
+            success = library_store.delete_user_playlist(user.get("sub", "guest"), pl_id)
+            self.send_json_response({"success": success, "deleted_id": pl_id}, status=200)
+            return
+
+        # 3. User Favorites (Toggle / Add / Remove)
+        elif path == "/api/user/favorites":
+            user = self.authenticate_request() or {"sub": "guest"}
+            track = post_data.get("track", post_data)
+            remove = bool(post_data.get("remove", False))
+            res = library_store.toggle_user_favorite(user.get("sub", "guest"), track, remove=remove)
+            self.send_json_response(res, status=200)
+            return
+
+        # 4. User Listening History (Record Play)
+        elif path == "/api/user/history":
+            user = self.authenticate_request() or {"sub": "guest"}
+            track = post_data.get("track", post_data)
+            res = library_store.record_user_play(user.get("sub", "guest"), track)
+            self.send_json_response(res, status=200)
+            return
+
+        # 5. Bulk Playlist Importer (Spotify, YouTube, Apple Music)
+        elif path == "/api/import/playlist":
+            url = post_data.get("url", "").strip()
+            if not url:
+                self.send_json_error(400, "Missing playlist URL parameter.")
+                return
+            try:
+                imported = import_playlist_by_url(url)
+                self.send_json_response(imported, status=200)
+            except Exception as ie:
+                logger.error(f"Failed to import playlist from {url}: {ie}")
+                self.send_json_error(400, f"Playlist import failure: {str(ie)}")
+            return
+
+        self.send_error(404, "Endpoint not found.")
+
+    def do_DELETE(self):
+        """Handles RESTful DELETE requests for user resources."""
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        params = urllib.parse.parse_qs(parsed.query)
+
+        if path == "/api/user/playlists":
+            user = self.authenticate_request() or {"sub": "guest"}
+            pl_id = params.get("id", [""])[0]
+            if not pl_id:
+                content_len = int(self.headers.get("Content-Length", 0))
+                if content_len > 0:
+                    try:
+                        b = json.loads(self.rfile.read(content_len).decode("utf-8"))
+                        pl_id = b.get("id", "")
+                    except Exception:
+                        pass
+            success = library_store.delete_user_playlist(user.get("sub", "guest"), pl_id)
+            self.send_json_response({"success": success, "deleted_id": pl_id})
+            return
+
         self.send_error(404, "Endpoint not found.")
 
     def do_GET(self):
@@ -1030,7 +1275,11 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         params = urllib.parse.parse_qs(parsed.query)
         client_ip = self.get_client_ip()
 
-        PUBLIC_ENDPOINTS = {"/", "/api/trending", "/api/health"}
+        PUBLIC_ENDPOINTS = {
+            "/", "/api/trending", "/api/health", "/api/search", "/api/radio",
+            "/api/lyrics", "/api/stream", "/api/user/playlists", "/api/user/favorites",
+            "/api/user/history", "/api/user/smart-playlists", "/api/import/playlist"
+        }
 
         if path.startswith("/api/"):
             if os.getenv("ENVIRONMENT") != "test":
@@ -1049,6 +1298,8 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                     self.send_auth_error("Valid Bearer token required to access this endpoint.")
                     return
                 self.current_user = user
+            else:
+                self.current_user = self.authenticate_request() or {"sub": "guest"}
 
         # 0. API: Health Check (Phase 1, Step 1.2)
         if path == "/api/health":
@@ -1116,6 +1367,10 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         # 5. API: Direct In-Memory Audio Streaming Proxy
         elif path == "/api/stream":
             vid = params.get("id", [""])[0]
+            quality = params.get("quality", ["high"])[0].lower()
+            if quality not in ("low", "high", "auto"):
+                quality = "high"
+
             try:
                 VideoIDValidator(id=vid)
             except ValidationError:
@@ -1123,7 +1378,7 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 return
 
             try:
-                stream_info = resolve_stream_url(vid)
+                stream_info = resolve_stream_url(vid, quality=quality)
                 stream_url = stream_info["stream_url"]
             except Exception as e:
                 logger.error(f"Failed to resolve stream for {vid}: {e}")
@@ -1153,9 +1408,9 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                     if resp.status_code == 403 and retry_count < max_retries:
                         resp.close()
                         retry_count += 1
-                        STREAM_CACHE.pop(vid, None)
+                        STREAM_CACHE.pop(f"{vid}_{quality}", None)
                         try:
-                            stream_info = resolve_stream_url(vid, force_refresh=True)
+                            stream_info = resolve_stream_url(vid, quality=quality, force_refresh=True)
                             stream_url = stream_info["stream_url"]
                             continue
                         except Exception as ref_err:
@@ -1190,7 +1445,35 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 if resp is not None:
                     resp.close()
 
-        # 6. Fallback: Static Frontend Files
+        # 6. User Library: Custom Playlists
+        elif path == "/api/user/playlists":
+            user = getattr(self, "current_user", None) or {"sub": "guest"}
+            playlists = library_store.get_user_playlists(user.get("sub", "guest"))
+            self.send_json_response(playlists)
+            return
+
+        # 7. User Library: Favorites
+        elif path == "/api/user/favorites":
+            user = getattr(self, "current_user", None) or {"sub": "guest"}
+            favorites = library_store.get_user_favorites(user.get("sub", "guest"))
+            self.send_json_response(favorites)
+            return
+
+        # 8. User Library: Listening History
+        elif path == "/api/user/history":
+            user = getattr(self, "current_user", None) or {"sub": "guest"}
+            history = library_store.get_user_history(user.get("sub", "guest"))
+            self.send_json_response(history)
+            return
+
+        # 9. User Library: Dynamic Smart Playlists ("On Repeat", "Recently Played", "Jump Back In")
+        elif path == "/api/user/smart-playlists":
+            user = getattr(self, "current_user", None) or {"sub": "guest"}
+            smart = library_store.get_smart_playlists(user.get("sub", "guest"))
+            self.send_json_response(smart)
+            return
+
+        # 10. Fallback: Static Frontend Files
         super().do_GET()
 
 def start_server(port: int = 8000, host: str = "127.0.0.1", use_ssl: bool = False):
