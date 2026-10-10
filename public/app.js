@@ -3504,8 +3504,8 @@ function generateFallbackCover(title, artist) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
     <defs>
       <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#10b981"/>
-        <stop offset="100%" stop-color="#05070c"/>
+        <stop offset="0%" stop-color="#27272a"/>
+        <stop offset="100%" stop-color="#09090b"/>
       </linearGradient>
     </defs>
     <rect width="300" height="300" fill="url(#grad)"/>
@@ -4268,15 +4268,9 @@ function startSpectrumVisualizer() {
 
     const isNeumorphic = document.documentElement.getAttribute('data-theme') === 'neumorphic';
     const gradient = ctx.createLinearGradient(0, height, 0, 0);
-    if (isNeumorphic) {
-      gradient.addColorStop(0, '#52796f');
-      gradient.addColorStop(0.65, '#84a98c');
-      gradient.addColorStop(1, '#a3b18a');
-    } else {
-      gradient.addColorStop(0, '#10b981');
-      gradient.addColorStop(0.5, '#34d399');
-      gradient.addColorStop(1, '#6ee7b7');
-    }
+    gradient.addColorStop(0, '#ffffff');
+    gradient.addColorStop(0.5, '#a1a1aa');
+    gradient.addColorStop(1, '#52525b');
 
     for (let i = 0; i < barCount; i++) {
       const val = dataArray[i];
