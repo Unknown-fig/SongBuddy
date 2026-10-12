@@ -1249,7 +1249,7 @@ function openMobileSearch(initialQuery = '') {
   if (!overlay) return;
   $('pwa-install-toast')?.classList.add('hidden');
   overlay.classList.remove('hidden');
-  updateDockActive('dock-btn-home');
+  updateDockActive('dock-btn-search');
 
   if (card) {
     card.style.transform = '';
@@ -1265,6 +1265,9 @@ function openMobileSearch(initialQuery = '') {
     }
     setTimeout(() => {
       input.focus();
+      if (input.value) {
+        input.select();
+      }
       card?.classList.add('is-full-height');
     }, 120);
   }
@@ -1280,7 +1283,13 @@ function closeMobileSearch() {
   if (overlay) {
     overlay.classList.add('hidden');
   }
-  updateDockActive('dock-btn-music');
+  if (state.activeView === 'home') {
+    updateDockActive('dock-btn-home');
+  } else if (state.activeView === 'search') {
+    updateDockActive('dock-btn-search');
+  } else {
+    updateDockActive('dock-btn-music');
+  }
 }
 
 function initMobileSearchGestures() {
@@ -2687,16 +2696,26 @@ function closeLyrics() {
 window.closeLyrics = closeLyrics;
 
 // ============================================================================
-let desktopSearchAbort = null;
 
 function handleSearch(query, immediate = false) {
   if (!query || !query.trim()) {
-    switchView('home');
+    // Keep user on search view and show discovery state
+    if (state.activeView === 'search') {
+      renderSearchDiscoveryState();
+    }
     return;
   }
 
   const cleanQuery = query.trim();
   switchView('search');
+
+  // Sync inputs and clear buttons
+  const mainInput = $('search-input');
+  const inViewInput = $('in-view-search-input');
+  if (mainInput && mainInput.value !== cleanQuery) mainInput.value = cleanQuery;
+  if (inViewInput && inViewInput.value !== cleanQuery) inViewInput.value = cleanQuery;
+  $('search-clear-btn')?.classList.remove('hidden');
+  $('in-view-search-clear')?.classList.remove('hidden');
 
   // Always reset search filter to 'all' so results are never collapsed to 1 track
   state.activeSearchFilter = 'all';
@@ -2739,6 +2758,132 @@ function handleSearch(query, immediate = false) {
     performSearch();
   } else {
     state.searchDebounceTimer = setTimeout(performSearch, 300);
+  }
+}
+
+function renderSearchDiscoveryState() {
+  const container = $('search-results-list');
+  const titleEl = $('search-view-title');
+  if (titleEl) titleEl.textContent = 'Explore & Search Music';
+
+  const recent = typeof getRecentSearches === 'function' ? getRecentSearches() : [];
+  const trendingTags = [
+    { label: '🔥 Trending Hits', q: 'Trending Global and Indian Hits' },
+    { label: 'Arijit Singh', q: 'Arijit Singh' },
+    { label: 'The Weeknd', q: 'The Weeknd' },
+    { label: 'Taylor Swift', q: 'Taylor Swift' },
+    { label: 'Coldplay', q: 'Coldplay' },
+    { label: 'Travis Scott', q: 'Travis Scott' },
+    { label: 'Lo-Fi Study Chill', q: 'Lo-Fi Chill Relax Beats' },
+    { label: 'Bollywood Retro', q: 'Bollywood Classics Retro Hits' },
+    { label: 'Desi Hip-Hop', q: 'Desi Hip Hop Hits' },
+    { label: 'Punjabi Wave', q: 'Karan Aujla Diljit Dosanjh Punjabi Hits' },
+    { label: 'Deep Focus', q: 'Deep Focus Ambient Electronic Beats' }
+  ];
+
+  let html = `
+    <div class="search-discovery-wrapper">
+      <div class="search-prompt-hero">
+        <div class="search-prompt-icon-ring">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+        <h3 class="search-prompt-title">What would you like to hear?</h3>
+        <p class="search-prompt-subtitle">Type any artist, song, album, or paste a YouTube URL to stream immediately.</p>
+      </div>
+  `;
+
+  if (recent.length > 0) {
+    html += `
+      <div class="search-discovery-section">
+        <div class="search-discovery-section-header">
+          <span class="search-discovery-section-title">Recent Searches</span>
+          <button type="button" class="search-discovery-clear-btn" id="btn-discovery-clear-recents">Clear All</button>
+        </div>
+        <div class="search-discovery-chips" id="discovery-recent-chips">
+          ${recent.map(r => `
+            <div class="discovery-chip" data-query="${escapeHTML(r)}" role="button" tabindex="0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>${escapeHTML(r)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  html += `
+      <div class="search-discovery-section">
+        <div class="search-discovery-section-header">
+          <span class="search-discovery-section-title">Trending & Recommended</span>
+        </div>
+        <div class="search-discovery-chips">
+          ${trendingTags.map(t => `
+            <button type="button" class="discovery-trending-pill" data-query="${escapeHTML(t.q)}">
+              ${escapeHTML(t.label)}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="search-discovery-section">
+        <div class="search-discovery-section-header">
+          <span class="search-discovery-section-title">Browse Music Categories</span>
+        </div>
+        <div class="search-discovery-genres-grid">
+          <div class="discovery-genre-card" data-query="Pop Hits" style="--card-hue: 330deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Pop</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Hip Hop and Rap Hits" style="--card-hue: 25deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Hip-Hop</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Electronic Dance EDM" style="--card-hue: 260deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Electronic</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Indie Acoustic Alternative" style="--card-hue: 145deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Indie & Acoustic</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Bollywood Melodies and Hits" style="--card-hue: 45deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Bollywood</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Lo-Fi Chill Beats Study" style="--card-hue: 200deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Lo-Fi</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (container) {
+    container.innerHTML = html;
+
+    // Attach click listeners for chips
+    container.querySelectorAll('.discovery-chip, .discovery-trending-pill, .discovery-genre-card').forEach(el => {
+      el.addEventListener('click', () => {
+        const q = el.dataset.query;
+        if (q) {
+          const mainInput = $('search-input');
+          const inViewInput = $('in-view-search-input');
+          if (mainInput) mainInput.value = q;
+          if (inViewInput) inViewInput.value = q;
+          $('search-clear-btn')?.classList.remove('hidden');
+          $('in-view-search-clear')?.classList.remove('hidden');
+          if (typeof saveRecentSearch === 'function') saveRecentSearch(q);
+          handleSearch(q, true);
+        }
+      });
+    });
+
+    container.querySelector('#btn-discovery-clear-recents')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof clearAllRecentSearches === 'function') clearAllRecentSearches();
+      renderSearchDiscoveryState();
+    });
   }
 }
 
@@ -2849,6 +2994,8 @@ function switchView(viewName, subMode = 'favourites') {
   // Sync floating dock active status
   if (viewName === 'home') {
     updateDockActive('dock-btn-home');
+  } else if (viewName === 'search') {
+    updateDockActive('dock-btn-search');
   } else {
     updateDockActive('dock-btn-music');
   }
@@ -2865,6 +3012,21 @@ function handleNavigationClick(view) {
       switchView('home');
       $('main-feed')?.scrollTo({ top: 0, behavior: 'smooth' });
       showToastNotification('Explore Home Feed');
+      break;
+
+    case 'search':
+      switchView('search');
+      const searchBoxInput = $('in-view-search-input') || $('search-input');
+      if (searchBoxInput && searchBoxInput.value.trim()) {
+        handleSearch(searchBoxInput.value.trim(), true);
+      } else {
+        renderSearchDiscoveryState();
+      }
+      setTimeout(() => {
+        searchBoxInput?.focus();
+        searchBoxInput?.select();
+      }, 50);
+      showToastNotification('Search & Discover Music');
       break;
 
     case 'genres':
@@ -6233,17 +6395,32 @@ function setupEventListeners() {
   const searchClearBtn = $('search-clear-btn');
   const searchSubmitBtn = $('search-submit-btn');
 
-  // Expand search popover on focus or click
+  // In-view Search Bar elements (inside #view-search)
+  const inViewSearchInput = $('in-view-search-input');
+  const inViewSearchClear = $('in-view-search-clear');
+  const btnSearchAgain = $('btn-search-again');
+
+  // Expand search popover on focus or click and select text for effortless subsequent searches
   searchInput?.addEventListener('focus', () => {
     openDesktopSearchDropdown();
+    if (searchInput.value) {
+      searchInput.select();
+    }
   });
 
   searchInput?.addEventListener('click', () => {
     openDesktopSearchDropdown();
+    if (searchInput.value) {
+      searchInput.select();
+    }
   });
 
   searchInput?.addEventListener('input', (e) => {
     const val = e.target.value;
+    if (inViewSearchInput) {
+      inViewSearchInput.value = val;
+      inViewSearchClear?.classList.toggle('hidden', !val);
+    }
     searchClearBtn?.classList.toggle('hidden', !val);
     handleSearch(val, false);
 
@@ -6287,14 +6464,87 @@ function setupEventListeners() {
     }
   });
 
+  // Top Search Clear Button
   searchClearBtn?.addEventListener('click', () => {
     if (searchInput) {
       searchInput.value = '';
       searchInput.focus();
     }
+    if (inViewSearchInput) {
+      inViewSearchInput.value = '';
+    }
     searchClearBtn.classList.add('hidden');
+    inViewSearchClear?.classList.add('hidden');
     $('desktop-live-results-section')?.classList.add('hidden');
-    switchView('home');
+    // If on search view, show discovery state instead of kicking to home!
+    if (state.activeView === 'search') {
+      renderSearchDiscoveryState();
+    }
+    openDesktopSearchDropdown();
+  });
+
+  // In-View Search Input listeners
+  inViewSearchInput?.addEventListener('input', (e) => {
+    const val = e.target.value;
+    if (searchInput) {
+      searchInput.value = val;
+      searchClearBtn?.classList.toggle('hidden', !val);
+    }
+    inViewSearchClear?.classList.toggle('hidden', !val);
+    handleSearch(val, false);
+  });
+
+  inViewSearchInput?.addEventListener('focus', () => {
+    if (inViewSearchInput.value) {
+      inViewSearchInput.select();
+    }
+  });
+
+  inViewSearchInput?.addEventListener('click', () => {
+    if (inViewSearchInput.value) {
+      inViewSearchInput.select();
+    }
+  });
+
+  inViewSearchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = inViewSearchInput.value.trim();
+      if (val) {
+        clearTimeout(state.searchDebounceTimer);
+        saveRecentSearch(val);
+        handleSearch(val, true);
+        inViewSearchInput.blur();
+      }
+    } else if (e.key === 'Escape') {
+      inViewSearchInput.blur();
+    }
+  });
+
+  inViewSearchClear?.addEventListener('click', () => {
+    if (inViewSearchInput) {
+      inViewSearchInput.value = '';
+      inViewSearchInput.focus();
+    }
+    if (searchInput) {
+      searchInput.value = '';
+    }
+    inViewSearchClear.classList.add('hidden');
+    searchClearBtn?.classList.add('hidden');
+    renderSearchDiscoveryState();
+  });
+
+  // "Search Another Song" action button
+  btnSearchAgain?.addEventListener('click', () => {
+    if (window.innerWidth <= 768) {
+      openMobileSearch();
+    } else {
+      const targetInput = inViewSearchInput || searchInput;
+      if (targetInput) {
+        targetInput.focus();
+        targetInput.select();
+      }
+    }
   });
 
   // Desktop Search Trending Tags
@@ -6890,17 +7140,39 @@ function setupEventListeners() {
       closeLyrics();
     }
     closeQueueDrawer();
-    // On mobile devices, open the smooth instant search & discover drawer
-    if (window.innerWidth <= 768) {
-      openMobileSearch();
-      return;
-    }
     switchView('home');
     updateDockActive('dock-btn-home');
     const feed = $('main-feed');
     if (feed) feed.scrollTo({ top: 0, behavior: 'smooth' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showToastNotification('Exploring Home Feed');
+  });
+
+  // Dedicated Dock Search Button (Mobile & Desktop)
+  $('dock-btn-search')?.addEventListener('click', () => {
+    toggleDockUserPopover(true);
+    if (state.lyrics.isOpen) {
+      closeLyrics();
+    }
+    closeQueueDrawer();
+    if (window.innerWidth <= 768) {
+      openMobileSearch();
+      return;
+    }
+    switchView('search');
+    updateDockActive('dock-btn-search');
+    const input = $('in-view-search-input') || $('search-input');
+    if (input) {
+      if (input.value.trim()) {
+        handleSearch(input.value.trim(), true);
+      } else {
+        renderSearchDiscoveryState();
+      }
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 50);
+    }
   });
 
   // Mobile Header Search Button
