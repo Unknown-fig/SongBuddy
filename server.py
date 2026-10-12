@@ -569,13 +569,13 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
         with EXTRACTION_SEMAPHORE:
             url = f"https://www.youtube.com/watch?v={video_id}"
 
-            # Audio format specification according to selected quality tier
+            # Fast-stream audio format prioritizing instantaneous WebM Opus decoding
             if quality == "low":
-                audio_fmt = "bestaudio[abr<=80]/bestaudio[ext=webm]/bestaudio"
+                audio_fmt = "bestaudio[ext=webm][abr<=80]/250/249/bestaudio[ext=webm]/bestaudio[abr<=80]/bestaudio"
             elif quality == "high":
-                audio_fmt = "bestaudio[abr>=128]/bestaudio/best"
+                audio_fmt = "bestaudio[ext=webm][abr>=128]/251/bestaudio[ext=webm]/bestaudio[ext=m4a]/140/bestaudio/best"
             else:
-                audio_fmt = "bestaudio/best"
+                audio_fmt = "bestaudio[ext=webm]/251/250/249/bestaudio[ext=m4a]/140/bestaudio/best"
 
             # Support cookiefile managed dynamically by CookiePoolManager
             cookie_path = cookie_pool_manager.get_active_cookie_file()
@@ -584,16 +584,20 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
             info = None
             last_err = None
 
-            # Attempt 1: Modern mobile/visionos clients (visionos, android) WITHOUT cookies.
+            # Attempt 1: Modern mobile/visionos clients (visionos, android) WITHOUT cookies, skipping heavy DASH/HLS manifests
             try:
                 opts_tier1 = {
                     'format': audio_fmt,
                     'quiet': True,
                     'noplaylist': True,
                     'no_warnings': True,
+                    'skip_download': True,
+                    'youtube_include_dash_manifest': False,
+                    'youtube_include_hls_manifest': False,
                     'extractor_args': {
                         'youtube': {
-                            'player_client': ['visionos', 'android']
+                            'player_client': ['android', 'ios', 'web_safari'],
+                            'skip': ['dash', 'hls', 'translated_subs', 'comments']
                         }
                     }
                 }
@@ -603,7 +607,7 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
                     info = ydl.extract_info(url, download=False)
             except Exception as e1:
                 last_err = e1
-                logger.warning(f"Tier 1 (visionos/android) extraction failed for {video_id}: {e1}")
+                logger.warning(f"Tier 1 (android/ios) extraction failed for {video_id}: {e1}")
 
             # Attempt 2: If Tier 1 failed and cookies are available, try cookie-supporting clients
             if not info and cookie_path and cookie_path.exists():
@@ -613,10 +617,14 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
                         'quiet': True,
                         'noplaylist': True,
                         'no_warnings': True,
+                        'skip_download': True,
+                        'youtube_include_dash_manifest': False,
+                        'youtube_include_hls_manifest': False,
                         'cookiefile': str(cookie_path),
                         'extractor_args': {
                             'youtube': {
-                                'player_client': ['web_safari', 'tv', 'web']
+                                'player_client': ['web_safari', 'tv', 'web'],
+                                'skip': ['dash', 'hls', 'translated_subs', 'comments']
                             }
                         }
                     }
@@ -636,6 +644,9 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
                         'quiet': True,
                         'noplaylist': True,
                         'no_warnings': True,
+                        'skip_download': True,
+                        'youtube_include_dash_manifest': False,
+                        'youtube_include_hls_manifest': False,
                     }
                     if cookie_path and cookie_path.exists():
                         opts_tier3['cookiefile'] = str(cookie_path)
@@ -2006,7 +2017,7 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
 
         PUBLIC_ENDPOINTS = {
             "/", "/api/trending", "/api/health", "/api/health/cookies", "/api/search", "/api/radio",
-            "/api/lyrics", "/api/lyrics/sse", "/api/karaoke", "/api/stream", "/api/stream/refresh",
+            "/api/lyrics", "/api/lyrics/sse", "/api/karaoke", "/api/stream", "/api/stream/refresh", "/api/stream/prewarm",
             "/api/sponsorblock", "/api/cookies/rotate",
             "/api/jukebox/room", "/api/jukebox/queue", "/api/jukebox/vote", "/api/jukebox/next", "/api/jukebox/qr",
             "/api/share/mint", "/api/share/resolve", "/api/recommendations",
@@ -2081,6 +2092,28 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Failed to refresh stream token for {vid}: {e}")
                 self.send_json_error(500, f"Stream token refresh failed: {str(e)}")
+            return
+
+        # 0d. API: Ultra-Low Latency Background Stream Pre-Warming
+        elif path == "/api/stream/prewarm":
+            vid = params.get("id", [""])[0]
+            quality = params.get("quality", ["high"])[0].lower()
+            if quality not in ("low", "high", "auto"):
+                quality = "high"
+            try:
+                VideoIDValidator(id=vid)
+            except ValidationError:
+                self.send_json_error(400, "Invalid YouTube video ID parameter format.")
+                return
+
+            def _bg_prewarm():
+                try:
+                    resolve_stream_url(vid, quality=quality)
+                except Exception as ex:
+                    logger.debug(f"Prewarm background resolution for {vid}: {ex}")
+
+            threading.Thread(target=_bg_prewarm, daemon=True).start()
+            self.send_json_response({"prewarming": True, "id": vid})
             return
 
         # 0d. API: Party Jukebox Room State
@@ -2334,12 +2367,15 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 self.send_json_error(502, f"Audio stream extraction failed for track {vid}: {str(e)}")
                 return
 
-            # On Vercel or when redirect requested: redirect to avoid serverless 10s function timeout
-            if os.getenv("VERCEL") or params.get("redirect", ["false"])[0].lower() == "true":
+            # Direct 307 redirect to Google Edge CDN for millisecond playback start and zero buffering delay
+            # Triggered automatically on Vercel or when redirect requested, or when proxy not forced:
+            redirect_param = params.get("redirect", ["true"])[0].lower()
+            if os.getenv("VERCEL") or redirect_param != "false":
                 self.send_response(307)
                 self.send_header("Location", stream_url)
                 self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Cache-Control", "public, max-age=3600")
+                self.send_header("Access-Control-Allow-Headers", "*")
+                self.send_header("Cache-Control", "public, max-age=7200")
                 self.end_headers()
                 return
 

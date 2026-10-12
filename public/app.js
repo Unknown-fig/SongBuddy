@@ -971,8 +971,15 @@ function saveQueueToStorage() {
   }
 }
 
+function prewarmTrack(videoId) {
+  if (!videoId || String(videoId).length !== 11) return;
+  fetch(`/api/stream/prewarm?id=${encodeURIComponent(videoId)}&quality=high`, { priority: 'low' }).catch(() => {});
+}
+window.prewarmTrack = prewarmTrack;
+
 function addToQueue(track, silent = false) {
   if (!track || !track.id) return;
+  prewarmTrack(track.id);
 
   const trackObj = {
     id: track.id,
@@ -1888,40 +1895,35 @@ async function playTrack(track, options = { startRadio: true }) {
     try { ytPlayer.setPlaybackRate(state.playbackSpeed || 1.0); } catch (e) {}
   }
 
-  // Primary: Use YouTube Official Player for 100% genuine song playback (zero bot blocks / zero test sounds)
-  // When Karaoke mode or 8D Audio mode is active, route through Direct Audio stream so Web Audio DSP can process
-  if (!state.karaokeMode && (!state.eightD || !state.eightD.enabled) && track.id && (!track.streamUrl || track.id.length === 11)) {
-    isYTActive = true;
-    if (audio) {
-      audio.pause();
-      audio.src = '';
-    }
-    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+  // Ultra-Low Latency Instant Hybrid Audio Engine:
+  // Starts native direct audio stream in milliseconds, eliminating long-song buffering lag.
+  // Seamlessly falls back to YouTube Iframe player if native stream is restricted or fails.
+  const q = (state.audioEngine && state.audioEngine.quality) || 'high';
+  const streamUrl = track.offlineBlobUrl || track.streamUrl || `/api/stream?id=${encodeURIComponent(track.id)}&quality=${q}&redirect=true`;
+
+  isYTActive = false;
+  stopYTProgressTracker();
+  if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+    try { ytPlayer.pauseVideo(); } catch (e) {}
+  }
+
+  audio.src = streamUrl;
+  audio.preload = 'auto';
+  audio.load();
+
+  try {
+    await audio.play();
+    updatePlayPauseIcons(true);
+  } catch (err) {
+    console.warn('[Direct Audio notice, attempting YouTube Iframe player]:', err);
+    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && track.id && String(track.id).length === 11) {
+      isYTActive = true;
+      try { audio.pause(); audio.src = ''; } catch (e) {}
       ytPlayer.loadVideoById(track.id);
       ytPlayer.playVideo();
       updatePlayPauseIcons(true);
       startYTProgressTracker();
     } else {
-      pendingYTTrack = track;
-      const q = (state.audioEngine && state.audioEngine.quality) || 'high';
-      const streamUrl = track.offlineBlobUrl || track.streamUrl || `/api/stream?id=${encodeURIComponent(track.id)}&quality=${q}`;
-      audio.src = streamUrl;
-      audio.load();
-      audio.play().then(() => updatePlayPauseIcons(true)).catch(console.warn);
-    }
-  } else {
-    isYTActive = false;
-    stopYTProgressTracker();
-    if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
-    const q = (state.audioEngine && state.audioEngine.quality) || 'high';
-    const streamUrl = track.offlineBlobUrl || track.streamUrl || `/api/stream?id=${encodeURIComponent(track.id)}&quality=${q}`;
-    audio.src = streamUrl;
-    audio.load();
-    try {
-      await audio.play();
-      updatePlayPauseIcons(true);
-    } catch (err) {
-      console.warn('[Audio play exception]:', err);
       updatePlayPauseIcons(false);
     }
   }
@@ -2335,6 +2337,11 @@ async function loadRadioQueue(seedId, seedArtist = '', seedTitle = '') {
     const newIds = new Set(filtered.map(t => t.id));
     const toAppend = cleanedExisting.filter(t => !newIds.has(t.id));
     state.radioQueue = [...filtered, ...toAppend].slice(0, 50);
+
+    // Pre-warm immediate next track for instant 0ms queue transition
+    if (state.radioQueue.length > 0 && state.radioQueue[0].id) {
+      prewarmTrack(state.radioQueue[0].id);
+    }
 
     state.radioLoading = false;
 
@@ -2893,6 +2900,13 @@ function renderSearchResults(tracks) {
   container.innerHTML = '';
 
   let list = tracks || [];
+
+  // Pre-warm the top 2 search results in background for instant millisecond playback if tapped
+  if (Array.isArray(list) && list.length > 0) {
+    list.slice(0, 2).forEach(t => {
+      if (t && t.id) prewarmTrack(t.id);
+    });
+  }
   const filter = state.activeSearchFilter || 'all';
   const currentQuery = $('search-input')?.value?.toLowerCase()?.trim() || '';
 
@@ -5994,6 +6008,20 @@ function setupAudioListeners() {
       const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
       const pct = (bufferedEnd / audio.duration) * 100;
       if ($('scrubber-buffer-bar')) $('scrubber-buffer-bar').style.width = `${pct}%`;
+    }
+  });
+
+  audio.addEventListener('error', (e) => {
+    if (!isYTActive && state.currentTrack && state.currentTrack.id && String(state.currentTrack.id).length === 11) {
+      console.warn('[Audio direct stream fallback]: Engaging YouTube player for track:', state.currentTrack.id);
+      if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+        isYTActive = true;
+        try { audio.pause(); audio.src = ''; } catch (err) {}
+        ytPlayer.loadVideoById(state.currentTrack.id);
+        ytPlayer.playVideo();
+        updatePlayPauseIcons(true);
+        startYTProgressTracker();
+      }
     }
   });
 

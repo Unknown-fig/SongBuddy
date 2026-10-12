@@ -21,6 +21,9 @@ revoked_tokens.json
 cookies.txt
 *cookie*.txt
 *.db
+*.db-*
+*.db-wal
+*.db-shm
 library_backup.json
 
 # Test & Coverage artifacts
