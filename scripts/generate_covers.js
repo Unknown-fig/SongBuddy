@@ -135,7 +135,7 @@ function createSvgForCover(b64, config) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
   <defs>
     <linearGradient id="overlayGrad" x1="0" y1="0" x2="0" y2="100%">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0.15"/>
+      <stop offset="0%" stop-color="#0c0c0cff" stop-opacity="0.15"/>
       <stop offset="45%" stop-color="#000000" stop-opacity="0.3"/>
       <stop offset="78%" stop-color="#000000" stop-opacity="0.75"/>
       <stop offset="100%" stop-color="#000000" stop-opacity="0.95"/>

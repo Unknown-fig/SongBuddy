@@ -19,7 +19,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=58">
+  <link rel="stylesheet" href="styles.css?v=63">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -130,6 +130,13 @@
                 <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"></path>
               </svg>
               <span class="nav-label">Radio</span>
+            </li>
+            <li class="nav-item" data-view="jukebox" id="nav-jukebox">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <span class="nav-label">Party Jukebox</span>
             </li>
           </ul>
         </div>
@@ -289,10 +296,66 @@
               <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
           </button>
+
+          <!-- Expanded Search Popover Dropdown (Expands smoothly on tap / focus) -->
+          <div class="search-dropdown-popover hidden" id="search-dropdown-popover" role="region" aria-label="Search suggestions">
+            <!-- Quick Trend Chips -->
+            <div class="search-popover-section">
+              <div class="search-popover-section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span>Trending Searches</span>
+              </div>
+              <div class="search-popover-tags" id="desktop-search-tags">
+                <button type="button" class="popover-tag" data-query="Travis Scott">Travis Scott</button>
+                <button type="button" class="popover-tag" data-query="The Weeknd">The Weeknd</button>
+                <button type="button" class="popover-tag" data-query="Arijit Singh">Arijit Singh</button>
+                <button type="button" class="popover-tag" data-query="Billie Eilish">Billie Eilish</button>
+                <button type="button" class="popover-tag" data-query="Taylor Swift">Taylor Swift</button>
+                <button type="button" class="popover-tag" data-query="Lo-Fi Chill">Lo-Fi Beats</button>
+                <button type="button" class="popover-tag" data-query="Bollywood Hits">Bollywood</button>
+              </div>
+            </div>
+
+            <!-- Recent Searches Section -->
+            <div class="search-popover-section hidden" id="desktop-recent-section">
+              <div class="search-popover-section-header">
+                <span class="search-popover-section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <span>Recent Searches</span>
+                </span>
+                <button type="button" class="clear-recent-btn" id="btn-clear-recent-search">Clear All</button>
+              </div>
+              <ul class="recent-searches-list" id="desktop-recent-list"></ul>
+            </div>
+
+            <!-- Quick Live Matches Section -->
+            <div class="search-popover-section hidden" id="desktop-live-results-section">
+              <div class="search-popover-section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <span>Quick Matches</span>
+              </div>
+              <div class="desktop-live-results" id="desktop-live-results"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Right User Actions + Studio Hi-Fi Badge -->
         <div class="top-user-actions">
+          <button class="songbuddy-studio-badge chip-jukebox" id="btn-top-jukebox" title="Party Jukebox &amp; Guest Voting Mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <span>Party Jukebox</span>
+          </button>
           <button class="songbuddy-studio-badge" id="btn-studio-subsonic" title="OpenSubsonic Mobile Sync (Symfonium / Feishin / Amperfy)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
               <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
@@ -1092,6 +1155,9 @@
               <line x1="12" y1="19" x2="12" y2="22"></line>
             </svg>
           </button>
+          <button class="neu-chip-btn chip-8d" id="chip-8d" title="Toggle 8D Spatial Audio 360 Orbit (Headphones Recommended)">
+            <span class="chip-8d-text">8D</span>
+          </button>
           <button class="neu-chip-btn chip-subsonic" id="chip-subsonic" title="OpenSubsonic Mobile Integration">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
@@ -1145,7 +1211,7 @@
             <circle cx="12" cy="10" r="2"></circle>
             <circle cx="20" cy="14" r="2"></circle>
           </svg>
-        <button class="neu-sub-btn active" id="btn-neu-sponsorblock" title="SponsorBlock: Auto-Skip Skits &amp; Intros (Active)" aria-label="Toggle SponsorBlock Auto-Skip">
+        <button class="neu-sub-btn" id="btn-neu-sponsorblock" title="Auto-Skip Disabled" aria-label="Auto-Skip Disabled" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
             <polygon points="5 4 15 12 5 20 5 4"></polygon>
             <line x1="19" y1="5" x2="19" y2="19" stroke-width="2.5"></line>
@@ -1243,6 +1309,23 @@
         </button>
       </div>
 
+      <!-- Mobile Expandable Search Bar Pill (Tapping expands up into music search drawer) -->
+      <div class="mobile-search-pill-bar" id="mobile-search-pill-bar" role="button" tabindex="0" title="Tap to search songs, artists, albums..." aria-label="Tap to Search Music">
+        <div class="mobile-search-pill-inner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="mobile-search-pill-icon">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span class="mobile-search-pill-text">Search songs, artists, albums...</span>
+          <div class="mobile-search-pill-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" width="12" height="12">
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+            <span>Expand</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Floating Bottom Clay Navigation Dock -->
       <div class="neu-dock-container">
         <!-- Dock User Profile / Settings Popover -->
@@ -1259,6 +1342,13 @@
             <button class="dock-popover-item" id="dock-action-favs" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
               <span>My Favourites</span>
+            </button>
+            <button class="dock-popover-item" id="dock-action-jukebox" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <span>Party Jukebox</span>
             </button>
             <button class="dock-popover-item" id="dock-action-cinema" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
@@ -1498,6 +1588,7 @@
           <div style="display:flex;align-items:center;gap:10px;">
             <h3 class="lyrics-track-title" id="lyrics-track-title">Butterfly Effect</h3>
             <span class="karaoke-live-badge hidden" id="karaoke-live-badge">Karaoke Active</span>
+            <span class="karaoke-countdown-badge hidden" id="karaoke-countdown-badge">Singing starts in 5s</span>
           </div>
           <p class="lyrics-track-artist" id="lyrics-track-artist">Travis Scott</p>
         </div>
@@ -1535,7 +1626,11 @@
        ==================================================================== -->
   <div id="mobile-search-drawer" class="mobile-search-overlay hidden" aria-modal="true" role="dialog" aria-label="Search and Discover Music">
     <div class="mobile-search-backdrop" id="mobile-search-backdrop"></div>
-    <div class="mobile-search-card">
+    <div class="mobile-search-card" id="mobile-search-card">
+      <!-- Swipe-down handle bar -->
+      <div class="mobile-search-drag-handle" id="mobile-search-drag-handle" title="Swipe down to dismiss">
+        <span class="drag-indicator-bar"></span>
+      </div>
       <div class="mobile-search-header">
         <div class="mobile-search-input-wrapper">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" class="mobile-search-icon">
@@ -1976,6 +2071,26 @@
             </div>
             <input type="range" class="dsp-range-slider" id="eq-spatial-slider" min="-1" max="1" step="0.05" value="0">
             <span class="dsp-hint">3D acoustic field &amp; stereo expansion</span>
+          </div>
+
+          <!-- 8D Spatial Audio 360-Degree Orbit Suite -->
+          <div class="dsp-card dsp-8d-card">
+            <div class="dsp-card-header">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="dsp-title">8D Spatial Audio Orbit</span>
+                <span class="dsp-val-badge" id="eight-d-status-val">Bypass</span>
+              </div>
+              <label class="dsp-toggle-row switch-small" style="padding:0;margin:0;cursor:pointer;" title="Toggle 360-Degree Binaural 8D Audio">
+                <input type="checkbox" id="toggle-8d-audio" class="dsp-switch-input">
+                <span class="dsp-switch-slider"></span>
+              </label>
+            </div>
+            <div class="crossfade-pills-row" id="eight-d-speed-pills">
+              <button type="button" class="dsp-pill" data-speed="15" id="eight-d-speed-15">Relaxed (15s)</button>
+              <button type="button" class="dsp-pill active" data-speed="11" id="eight-d-speed-11">Standard (11s)</button>
+              <button type="button" class="dsp-pill" data-speed="7" id="eight-d-speed-7">Dynamic (7s)</button>
+            </div>
+            <span class="dsp-hint">360° circular panning with acoustic head shadow filtering (Headphones Recommended)</span>
           </div>
 
           <!-- Crossfade Transition -->
@@ -2465,6 +2580,185 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ====================================================================
+       PARTY JUKEBOX & GUEST VOTING MODAL (Zero emojis, OLED aesthetic)
+       ==================================================================== -->
+  <div id="jukebox-modal" class="shortcuts-modal hidden" aria-modal="true" role="dialog" aria-label="Party Jukebox &amp; Guest Voting">
+    <div class="shortcuts-backdrop" id="jukebox-backdrop"></div>
+    <div class="shortcuts-card jukebox-modal-card">
+      <!-- Modal Header -->
+      <div class="shortcuts-header">
+        <div class="shortcuts-header-title">
+          <span class="shortcuts-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+          </span>
+          <div>
+            <h3 class="shortcuts-title">Party Jukebox &amp; Guest Voting</h3>
+            <p class="shortcuts-sub">Collaborative queue with QR guest scan, upvoting &amp; duplicate shield</p>
+          </div>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-jukebox">&times;</button>
+      </div>
+
+      <!-- Mode Switcher Tabs: Host Station / Guest Mobile View -->
+      <div class="jukebox-tabs-row">
+        <button type="button" class="jukebox-tab-btn active" id="tab-jukebox-host">Host Dashboard</button>
+        <button type="button" class="jukebox-tab-btn" id="tab-jukebox-guest">Guest Queue &amp; Vote</button>
+      </div>
+
+      <!-- Tab 1: Host Dashboard -->
+      <div class="jukebox-tab-pane" id="pane-jukebox-host">
+        <!-- Room Info & QR Section -->
+        <div class="jukebox-hero-box">
+          <div class="jukebox-qr-wrap" id="jukebox-qr-wrap">
+            <div class="jukebox-qr-box" id="jukebox-qr-box">
+              <div class="jukebox-qr-loader">Loading QR...</div>
+            </div>
+            <span class="jukebox-qr-caption">Scan with phone camera to join</span>
+          </div>
+          <div class="jukebox-meta-wrap">
+            <div class="jukebox-code-pill">
+              <span class="jukebox-code-label">PARTY ROOM CODE</span>
+              <span class="jukebox-code-value" id="jukebox-code-val">PARTY1</span>
+            </div>
+            <div class="jukebox-actions-grid">
+              <button type="button" class="btn-jukebox-action" id="btn-copy-party-code">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                <span>Copy Code</span>
+              </button>
+              <button type="button" class="btn-jukebox-action" id="btn-copy-party-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                <span>Copy Link</span>
+              </button>
+              <button type="button" class="btn-jukebox-action" id="btn-jukebox-new-room">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>New Room</span>
+              </button>
+              <button type="button" class="btn-jukebox-action" id="btn-jukebox-next-top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+                <span>Play #1 Top Voted</span>
+              </button>
+            </div>
+            <!-- Host Toggles -->
+            <div class="jukebox-toggles-row">
+              <label class="jukebox-toggle-label">
+                <input type="checkbox" id="chk-jukebox-guest-enqueue" checked>
+                <span>Allow Guest Submissions</span>
+              </label>
+              <label class="jukebox-toggle-label">
+                <input type="checkbox" id="chk-jukebox-auto-advance" checked>
+                <span>Auto-Play Top Voted When Track Ends</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Party Queue Section Header -->
+        <div class="jukebox-section-title-row">
+          <div class="jukebox-section-title-wrap">
+            <span class="jukebox-eyebrow">POPULARITY-RANKED</span>
+            <h4 class="jukebox-h4">Party Queue (<span id="jukebox-queue-count">0</span>)</h4>
+          </div>
+          <button type="button" class="btn-jukebox-clear" id="btn-jukebox-clear-queue">Clear Queue</button>
+        </div>
+
+        <!-- Queue Item List -->
+        <div class="jukebox-queue-container" id="jukebox-host-queue-list">
+          <div class="jukebox-empty-state" id="jukebox-host-empty">
+            No guest tracks enqueued yet. Guests can scan the QR code to submit and vote!
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Guest Queue & Vote View -->
+      <div class="jukebox-tab-pane hidden" id="pane-jukebox-guest">
+        <!-- Guest Search & Add -->
+        <div class="jukebox-guest-search-box">
+          <div class="jukebox-guest-search-input-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="jukebox-guest-search" class="jukebox-guest-input" placeholder="Search track or artist to enqueue..." autocomplete="off">
+          </div>
+          <div class="jukebox-search-dropdown hidden" id="jukebox-search-dropdown"></div>
+        </div>
+
+        <!-- Guest Queue List with Upvote/Downvote -->
+        <div class="jukebox-section-title-row" style="margin-top:14px;">
+          <h4 class="jukebox-h4">Live Party Queue &amp; Vote</h4>
+          <span class="jukebox-vote-tip">Tap arrows to vote songs up or down</span>
+        </div>
+        <div class="jukebox-queue-container" id="jukebox-guest-queue-list">
+          <div class="jukebox-empty-state" id="jukebox-guest-empty">
+            Queue is empty. Search a song above to add it to the party!
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       EXPIRABLE PUBLIC SHARE LINK MODAL
+       ==================================================================== -->
+  <div id="share-link-modal" class="shortcuts-modal hidden" aria-modal="true" role="dialog" aria-label="Expirable Public Share Link">
+    <div class="shortcuts-backdrop" id="share-link-backdrop"></div>
+    <div class="shortcuts-card import-modal-card">
+      <div class="shortcuts-header">
+        <div class="shortcuts-header-title">
+          <span class="shortcuts-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+          </span>
+          <div>
+            <h3 class="shortcuts-title">Expirable Share Link</h3>
+            <p class="shortcuts-sub">Mint a signed read-only streaming link with custom expiration</p>
+          </div>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-share-link">&times;</button>
+      </div>
+
+      <div class="import-modal-body">
+        <div class="share-track-preview-box" id="share-track-preview-box">
+          <span class="share-track-preview-title" id="share-preview-title">Current Track</span>
+          <span class="share-track-preview-artist" id="share-preview-artist">Artist</span>
+        </div>
+
+        <label class="import-label" style="margin-top:14px;">Link Expiration Horizon</label>
+        <div class="share-duration-pills">
+          <button type="button" class="share-duration-pill" data-hours="1">1 Hour</button>
+          <button type="button" class="share-duration-pill active" data-hours="24">24 Hours</button>
+          <button type="button" class="share-duration-pill" data-hours="48">48 Hours</button>
+          <button type="button" class="share-duration-pill" data-hours="168">7 Days</button>
+        </div>
+
+        <label class="jukebox-toggle-label" style="margin-top:16px;">
+          <input type="checkbox" id="chk-share-allow-download" checked>
+          <span>Allow Guest Audio Downloads</span>
+        </label>
+
+        <div class="share-result-container hidden" id="share-result-container">
+          <label class="import-label">Signed Read-Only Link</label>
+          <div class="import-input-wrap">
+            <input type="text" id="share-result-url" class="import-input" readonly>
+            <button type="button" class="btn-import-submit" id="btn-copy-share-url" style="margin-left:8px;padding:0 16px;">Copy</button>
+          </div>
+        </div>
+
+        <div class="import-actions-row" style="margin-top:20px;">
+          <button type="button" class="btn-import-cancel" id="btn-share-link-cancel">Close</button>
+          <button type="button" class="btn-import-submit" id="btn-generate-share-link">Generate Share Link</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <!-- SponsorBlock Intelligent Skip Toast Badge (Zero emojis, OLED aesthetic) -->
   <div class="sponsorblock-toast hidden" id="sponsorblock-toast" role="status" aria-live="polite">
     <div class="sb-toast-icon">
@@ -2493,6 +2787,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=58"></script>
+  <script src="app.js?v=63"></script>
 </body>
 </html>

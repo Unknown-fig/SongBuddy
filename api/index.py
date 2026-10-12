@@ -59,3 +59,7 @@ class handler(SongBuddyHandler):
     def do_OPTIONS(self):
         self._normalize_vercel_path()
         super().do_OPTIONS()
+
+    def do_DELETE(self):
+        self._normalize_vercel_path()
+        super().do_DELETE()

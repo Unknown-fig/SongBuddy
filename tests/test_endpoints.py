@@ -64,6 +64,15 @@ def test_radio_endpoint(client):
         assert "artist" in data[0]
 
 @pytest.mark.integration
+def test_radio_endpoint_with_title(client):
+    """Test /api/radio endpoint with title parameter for language coherence"""
+    client.request("GET", "/api/radio?id=BddP6PY427U&artist=Arijit+Singh&title=Kesariya")
+    response = client.getresponse()
+    assert response.status == 200
+    data = json.loads(response.read().decode("utf-8"))
+    assert isinstance(data, list)
+
+@pytest.mark.integration
 def test_thumb_color_endpoint(client):
     """Test /api/thumb_color endpoint extracting RGB accent color"""
     client.request("GET", "/api/thumb_color?id=4NRXx6U8ABQ")

@@ -48,6 +48,24 @@ except ImportError:
         core_refresh_stream_token = None
         inspect_cdn_stream_expiry = None
 
+try:
+    from social_jukebox import jukebox_manager, share_link_manager, generate_qr_svg
+except ImportError:
+    try:
+        from spot_extractor.social_jukebox import jukebox_manager, share_link_manager, generate_qr_svg
+    except ImportError:
+        jukebox_manager = None
+        share_link_manager = None
+        generate_qr_svg = None
+
+try:
+    from recommender import recommendation_engine
+except ImportError:
+    try:
+        from spot_extractor.recommender import recommendation_engine
+    except ImportError:
+        recommendation_engine = None
+
 
 # Initialize FastMCP Server
 mcp = FastMCP("spot-extractor-engine")
@@ -533,6 +551,157 @@ def refresh_stream_token(video_id: str, byte_offset: int = 0) -> str:
         }, indent=2)
     else:
         return json.dumps({"status": "unavailable", "message": "Stream refresher not loaded."})
+
+
+@mcp.tool()
+def create_jukebox_party(name: str = "SongBuddy VIP Lounge", max_guest_songs: int = 5) -> str:
+    """
+    Guest Jukebox & Party Voting Mode:
+    Creates a new collaborative Party Jukebox room with an exclusive 6-character room code,
+    host authentication secret, and QR-code join link for party guests.
+    """
+    if not jukebox_manager:
+        return json.dumps({"status": "unavailable", "message": "Jukebox manager not initialized."})
+    
+    room, host_token = jukebox_manager.create_room(
+        host_user_id="mcp_host",
+        name=name,
+        max_guest_songs=max_guest_songs
+    )
+    return json.dumps({
+        "status": "success",
+        "room_code": room.code,
+        "name": room.name,
+        "host_token": host_token,
+        "max_guest_songs": room.max_guest_songs,
+        "join_url": f"https://songbuddy-swart.vercel.app/#party={room.code}",
+        "message": f"Party Room '{room.name}' created with code: {room.code}"
+    }, indent=2)
+
+
+@mcp.tool()
+def get_jukebox_queue(room_code: str = "PARTY1") -> str:
+    """
+    Guest Jukebox Queue Inspector:
+    Retrieves the current party queue sorted by popularity score, total votes,
+    currently playing song, and room metadata.
+    """
+    if not jukebox_manager:
+        return json.dumps({"status": "unavailable", "message": "Jukebox manager not initialized."})
+    
+    room = jukebox_manager.get_or_create_room(room_code)
+    return json.dumps(room.to_dict(), indent=2)
+
+
+@mcp.tool()
+def enqueue_jukebox_track(
+    room_code: str,
+    track_id: str,
+    title: str = "Track",
+    artist: str = "Artist",
+    guest_name: str = "Agent DJ"
+) -> str:
+    """
+    Enqueue Track into Jukebox Party:
+    Adds a track to the collaborative party queue with automatic duplicate detection
+    and per-guest rate limits. Submitter's upvote is automatically cast.
+    """
+    if not jukebox_manager:
+        return json.dumps({"status": "unavailable", "message": "Jukebox manager not initialized."})
+    
+    room = jukebox_manager.get_or_create_room(room_code)
+    track_data = {
+        "id": track_id,
+        "title": title or f"Track {track_id}",
+        "artist": artist or "Unknown Artist",
+        "duration": 200,
+        "thumbnail": f"https://i.ytimg.com/vi/{track_id}/hqdefault.jpg"
+    }
+    try:
+        item = room.enqueue_track(track_data, guest_id=f"guest_{guest_name.lower().replace(' ', '_')}", guest_name=guest_name)
+        return json.dumps({
+            "status": "success",
+            "message": f"'{item['title']}' enqueued to Room {room.code}.",
+            "item": item,
+            "total_queued": len(room.queue)
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)}, indent=2)
+
+
+@mcp.tool()
+def vote_jukebox_track(
+    room_code: str,
+    queue_id: str,
+    direction: str = "up",
+    guest_id: str = "mcp_agent"
+) -> str:
+    """
+    Vote on Jukebox Track:
+    Casts an upvote or downvote for a track in the party queue, immediately re-sorting
+    the queue based on community popularity score.
+    """
+    if not jukebox_manager:
+        return json.dumps({"status": "unavailable", "message": "Jukebox manager not initialized."})
+    
+    room = jukebox_manager.get_or_create_room(room_code)
+    try:
+        item = room.vote_track(queue_id, guest_id=guest_id, direction=direction)
+        return json.dumps({
+            "status": "success",
+            "message": f"Vote recorded for '{item['title']}'. New score: {item['score']}",
+            "item": item
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)}, indent=2)
+
+
+@mcp.tool()
+def mint_expirable_share_link(
+    target_id: str,
+    item_type: str = "track",
+    title: str = "",
+    artist: str = "",
+    duration_hours: int = 24,
+    allow_download: bool = True
+) -> str:
+    """
+    Expirable Public Share Link Generator:
+    Generates a cryptographically signed, read-only URL with an expiration timer
+    and optional download toggles, allowing non-registered guests to stream audio.
+    """
+    if not share_link_manager:
+        return json.dumps({"status": "unavailable", "message": "Share link manager not initialized."})
+    
+    minted = share_link_manager.mint_token(
+        item_type=item_type,
+        item_id=target_id,
+        title=title,
+        artist=artist,
+        duration_hours=duration_hours,
+        allow_download=allow_download,
+        created_by="mcp_agent"
+    )
+    minted["public_url"] = f"https://songbuddy-swart.vercel.app{minted['share_url']}"
+    return json.dumps(minted, indent=2)
+
+
+@mcp.tool()
+def get_similar_tracks(title: str, artist: str = "", limit: int = 5) -> str:
+    """
+    Recommends musically similar tracks matching the tempo, vibe, and artist
+    of the specified song for continuous queue playback.
+    """
+    if not recommendation_engine:
+        return "Recommendation engine not initialized."
+    tracks = recommendation_engine.get_recommendations(title=title, artist=artist, limit=limit)
+    if not tracks:
+        return "No matching recommendations found."
+
+    lines = [f"Recommended tracks for '{title}' by {artist or 'Unknown'}:"]
+    for i, t in enumerate(tracks, 1):
+        lines.append(f"{i}. {t['title']} - {t['artist']} ({t.get('source', 'generic')})")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

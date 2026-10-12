@@ -447,70 +447,75 @@ def fetch_sponsorblock_segments(video_id: str) -> Dict[str, Any]:
     if cached:
         return cached
 
-    url = "https://sponsorblock.kellr.net/api/skipSegments"
+    endpoints = [
+        "https://sponsor.ajay.app/api/skipSegments",
+        "https://sponsorblock.kellr.net/api/skipSegments"
+    ]
     categories = ["music_offtopic", "intro", "outro", "preview", "filler", "sponsor"]
     params = {
         "videoID": video_id,
         "categories": json.dumps(categories)
     }
 
-    try:
-        resp = requests.get(url, params=params, timeout=3.0)
-        if resp.status_code == 200:
-            raw_segments = resp.json()
-            parsed_segments = []
-            for item in raw_segments:
-                seg_times = item.get("segment", [])
-                if len(seg_times) >= 2:
-                    start_s = round(float(seg_times[0]), 2)
-                    end_s = round(float(seg_times[1]), 2)
-                    dur = round(end_s - start_s, 2)
-                    category = item.get("category", "music_offtopic")
-                    
-                    category_labels = {
-                        "music_offtopic": "Non-Music Video Intro / Skit",
-                        "intro": "Video Intro Sequence",
-                        "outro": "Outro Commentary / Credits",
-                        "sponsor": "Sponsor Message",
-                        "filler": "Non-Musical Intermission"
-                    }
+    for url in endpoints:
+        try:
+            resp = requests.get(url, params=params, timeout=3.5)
+            if resp.status_code == 200:
+                raw_segments = resp.json()
+                parsed_segments = []
+                for item in raw_segments:
+                    seg_times = item.get("segment", [])
+                    if len(seg_times) >= 2:
+                        start_s = round(float(seg_times[0]), 2)
+                        end_s = round(float(seg_times[1]), 2)
+                        dur = round(end_s - start_s, 2)
+                        category = item.get("category", "music_offtopic")
+                        
+                        category_labels = {
+                            "music_offtopic": "Non-Music Video Intro / Skit",
+                            "intro": "Video Intro Sequence",
+                            "outro": "Outro Commentary / Credits",
+                            "sponsor": "Sponsor Message",
+                            "filler": "Non-Musical Intermission"
+                        }
 
-                    parsed_segments.append({
-                        "category": category,
-                        "label": category_labels.get(category, "Non-Music Interlude"),
-                        "start": start_s,
-                        "end": end_s,
-                        "duration": dur,
-                        "action_type": item.get("actionType", "skip")
-                    })
+                        parsed_segments.append({
+                            "category": category,
+                            "label": category_labels.get(category, "Non-Music Interlude"),
+                            "start": start_s,
+                            "end": end_s,
+                            "duration": dur,
+                            "action_type": item.get("actionType", "skip")
+                        })
 
-            # Sort segments by chronological start time
-            parsed_segments.sort(key=lambda s: s["start"])
+                # Sort segments by chronological start time
+                parsed_segments.sort(key=lambda s: s["start"])
 
-            result = {
-                "has_segments": len(parsed_segments) > 0,
-                "video_id": video_id,
-                "total_segments": len(parsed_segments),
-                "total_skipped_seconds": sum(s["duration"] for s in parsed_segments),
-                "segments": parsed_segments
-            }
-            SPONSORBLOCK_CACHE.set(video_id, result)
-            return result
+                result = {
+                    "has_segments": len(parsed_segments) > 0,
+                    "video_id": video_id,
+                    "total_segments": len(parsed_segments),
+                    "total_skipped_seconds": sum(s["duration"] for s in parsed_segments),
+                    "segments": parsed_segments
+                }
+                SPONSORBLOCK_CACHE.set(video_id, result)
+                return result
 
-        elif resp.status_code == 404:
-            # Clean track: no non-music segments reported
-            clean_res = {
-                "has_segments": False,
-                "video_id": video_id,
-                "total_segments": 0,
-                "total_skipped_seconds": 0,
-                "segments": [],
-                "message": "Pure music track: No non-music skits or intros detected."
-            }
-            SPONSORBLOCK_CACHE.set(video_id, clean_res, ttl=12 * 3600)
-            return clean_res
+            elif resp.status_code == 404:
+                # Clean track: no non-music segments reported
+                clean_res = {
+                    "has_segments": False,
+                    "video_id": video_id,
+                    "total_segments": 0,
+                    "total_skipped_seconds": 0,
+                    "segments": [],
+                    "message": "Pure music track: No non-music skits or intros detected."
+                }
+                SPONSORBLOCK_CACHE.set(video_id, clean_res, ttl=12 * 3600)
+                return clean_res
 
-    except Exception as e:
-        logger.warning(f"SponsorBlock resolution failed for {video_id}: {e}")
+        except Exception as e:
+            logger.warning(f"SponsorBlock endpoint failed for {url}: {e}")
+            continue
 
     return {"has_segments": False, "segments": [], "error": "API unreachable"}

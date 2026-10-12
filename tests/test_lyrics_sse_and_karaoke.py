@@ -119,3 +119,54 @@ def test_mcp_karaoke_readiness_tool():
     data = json.loads(res_str)
     assert data["status"] == "ready"
     assert "vocal_cancellation" in data
+
+
+@pytest.mark.unit
+def test_is_valid_lyrics_match_rejection():
+    """Verify is_valid_lyrics_match rejects completely mismatched tracks from search results."""
+    from server import is_valid_lyrics_match
+    bogus_candidate = {
+        "trackName": "In For The Kill",
+        "artistName": "La Roux"
+    }
+    assert is_valid_lyrics_match(bogus_candidate, "La La La", "Release") is False
+    assert is_valid_lyrics_match(bogus_candidate, "La La La", "SickLot") is False
+
+    valid_candidate = {
+        "trackName": "Blinding Lights",
+        "artistName": "The Weeknd"
+    }
+    assert is_valid_lyrics_match(valid_candidate, "Blinding Lights", "The Weeknd") is True
+
+
+@pytest.mark.unit
+def test_clean_track_title_youtube_distributor():
+    """Verify clean_track_title extracts genuine artists from distributor description when channel is generic."""
+    from server import clean_track_title
+    desc = "Provided to YouTube by Erik\n\nLa La La · SickLot · Aditya Pushkarna\n\nHustle 5 - Episode 13"
+    title, artist = clean_track_title("La La La", "Release - Topic", description=desc)
+    assert title == "La La La"
+    assert "SickLot" in artist
+
+
+@pytest.mark.unit
+def test_fetch_lyrics_sicklot_local_fallback():
+    """Verify fetch_lyrics returns verified local lyrics for SickLot's 'La La La'."""
+    from server import fetch_lyrics
+    lyrics = fetch_lyrics("La La La", "SickLot")
+    assert lyrics is not None
+    assert lyrics.get("syncedLyrics") is not None
+    assert "Milay mujhse woh akhiyaan churaake" in lyrics["syncedLyrics"]
+    assert "Shawty mujhe dekhe, she go la la la" in lyrics["plainLyrics"]
+
+
+@pytest.mark.integration
+def test_lyrics_endpoint_generic_artist_resolution(client):
+    """Verify /api/lyrics correctly resolves generic 'Release' artist for La La La to SickLot."""
+    client.request("GET", "/api/lyrics?title=La+La+La&artist=Release")
+    resp = client.getresponse()
+    assert resp.status == 200
+    data = json.loads(resp.read().decode("utf-8"))
+    assert "syncedLyrics" in data
+    assert "Milay mujhse woh akhiyaan churaake" in data["syncedLyrics"]
+

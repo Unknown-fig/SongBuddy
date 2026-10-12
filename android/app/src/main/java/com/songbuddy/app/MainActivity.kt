@@ -95,7 +95,30 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
 
-                                    composable("search") {
+                                    composable(
+                                        "search",
+                                        enterTransition = {
+                                            androidx.compose.animation.slideInVertically(
+                                                initialOffsetY = { fullHeight -> fullHeight },
+                                                animationSpec = androidx.compose.animation.core.tween(350, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                            ) + androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
+                                        },
+                                        exitTransition = {
+                                            androidx.compose.animation.slideOutVertically(
+                                                targetOffsetY = { fullHeight -> fullHeight },
+                                                animationSpec = androidx.compose.animation.core.tween(280, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+                                            ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(200))
+                                        },
+                                        popEnterTransition = {
+                                            androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(250))
+                                        },
+                                        popExitTransition = {
+                                            androidx.compose.animation.slideOutVertically(
+                                                targetOffsetY = { fullHeight -> fullHeight },
+                                                animationSpec = androidx.compose.animation.core.tween(280, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+                                            ) + androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(200))
+                                        }
+                                    ) {
                                         SearchScreen(
                                             onBack = { navController.popBackStack() },
                                             onSearch = { q -> viewModel.search(q) },
