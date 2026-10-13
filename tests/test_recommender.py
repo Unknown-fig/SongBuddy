@@ -2,7 +2,7 @@
 Unit tests for SongBuddy Recommendation Engine (recommender.py) and its API / MCP interfaces.
 """
 import pytest
-from recommender import RecommendationEngine, recommendation_engine
+from recommender import RecommendationEngine, recommendation_engine, is_indian_hindi_track
 from mcp_server import get_similar_tracks
 
 def test_clean_title():
@@ -102,3 +102,12 @@ def test_filter_and_diversify_western_exclusion_on_hindi():
     assert len(filtered) == 2
     assert filtered[0]["id"] == "h1"
     assert filtered[1]["id"] == "h2"
+
+
+@pytest.mark.unit
+def test_sicklot_hustle_indian_detection():
+    """Verify that SickLot and Hustle tracks are recognized as Indian/Hindi for proper language-coherent autoplay."""
+    assert is_indian_hindi_track("La La La", "SickLot") is True
+    assert is_indian_hindi_track("La La La", "SickLot, Aditya Pushkarna") is True
+    assert is_indian_hindi_track("Hustle 5 Episode", "Various Artists") is True
+

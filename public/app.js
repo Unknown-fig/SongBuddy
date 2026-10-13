@@ -1190,6 +1190,11 @@ function openDesktopSearchDropdown() {
 }
 
 function closeDesktopSearchDropdown() {
+  if (desktopSearchAbort) {
+    try { desktopSearchAbort.abort(); } catch (e) {}
+    desktopSearchAbort = null;
+  }
+  clearTimeout(desktopSearchDebounce);
   const popover = $('search-dropdown-popover');
   const wrapper = $('search-box-wrapper');
   if (wrapper) wrapper.classList.remove('is-expanded');
@@ -6228,9 +6233,11 @@ function setupEventListeners() {
   });
 
   // Search Browse Shortcut
-  $('btn-search-browse')?.addEventListener('click', () => {
+  $('btn-search-browse')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     switchView('search');
-    const input = $('search-input');
+    renderSearchDiscoveryState();
+    const input = $('in-view-search-input') || $('search-input');
     if (input) {
       input.focus();
       input.select();
@@ -6427,6 +6434,18 @@ function setupEventListeners() {
   const inViewSearchInput = $('in-view-search-input');
   const inViewSearchClear = $('in-view-search-clear');
   const btnSearchAgain = $('btn-search-again');
+
+  // Click anywhere on search box wrapper to focus and open dropdown
+  $('search-box-wrapper')?.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-search-browse') || e.target.closest('#search-clear-btn')) return;
+    openDesktopSearchDropdown();
+    if (searchInput) {
+      searchInput.focus();
+      if (searchInput.value) {
+        searchInput.select();
+      }
+    }
+  });
 
   // Expand search popover on focus or click and select text for effortless subsequent searches
   searchInput?.addEventListener('focus', () => {

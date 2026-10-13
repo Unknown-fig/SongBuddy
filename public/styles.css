@@ -690,18 +690,18 @@ body.tv-mode-active .screen-ambilight-wrapper {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--r-full);
   padding: 8px 18px;
-  flex: 1 1 360px;
-  width: 440px;
-  min-width: 260px;
-  max-width: 580px;
+  flex: 1 1 320px;
+  min-width: 180px;
+  max-width: 540px;
+  cursor: text;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.5);
-  transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1), flex 0.32s cubic-bezier(0.16, 1, 0.3, 1), background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  transition: flex 0.25s cubic-bezier(0.16, 1, 0.3, 1), background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   z-index: 25;
 }
 
 .search-box-wrapper:hover {
   background: rgba(0, 0, 0, 0.96);
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.2);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), 0 10px 28px rgba(0, 0, 0, 0.6);
 }
 
@@ -710,9 +710,8 @@ body.tv-mode-active .screen-ambilight-wrapper {
   background: rgba(0, 0, 0, 0.98);
   border-color: rgba(255, 255, 255, 0.6);
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25), 0 16px 40px rgba(0, 0, 0, 0.85);
-  flex: 2 1 500px;
-  width: 600px;
-  max-width: 640px;
+  flex: 2 1 420px;
+  max-width: 620px;
   z-index: 120;
 }
 
@@ -966,25 +965,28 @@ body.tv-mode-active .screen-ambilight-wrapper {
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* SongBuddy Studio Hi-Fi Equalizer Badge */
+/* SongBuddy Studio Header Action Badges */
 .songbuddy-studio-badge,
 .spotify-premium-pill-btn {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.18) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   color: #f4f4f5;
-  font-weight: 700;
-  font-size: 13px;
-  font-family: inherit;
-  padding: 8px 16px;
-  border-radius: 9999px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  padding: 0;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+
+.songbuddy-studio-badge span,
+.spotify-premium-pill-btn span {
+  display: none;
 }
 
 .songbuddy-studio-badge svg,
@@ -995,16 +997,33 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 .songbuddy-studio-badge:hover,
 .spotify-premium-pill-btn:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.28) 100%);
-  border-color: rgba(129, 140, 248, 0.7);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.16) 100%);
+  border-color: rgba(255, 255, 255, 0.4);
   color: #ffffff;
   transform: translateY(-1px);
-  box-shadow: 0 4px 18px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 18px rgba(255, 255, 255, 0.25);
 }
 
 .songbuddy-studio-badge:hover svg,
 .spotify-premium-pill-btn:hover svg {
   transform: scale(1.15);
+}
+
+@media (min-width: 1680px) {
+  .songbuddy-studio-badge,
+  .spotify-premium-pill-btn {
+    width: auto;
+    height: auto;
+    padding: 8px 16px;
+    border-radius: 9999px;
+  }
+  .songbuddy-studio-badge span,
+  .spotify-premium-pill-btn span {
+    display: inline;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
 }
 
 .search-box-submit-btn {
@@ -1031,13 +1050,16 @@ body.tv-mode-active .screen-ambilight-wrapper {
 }
 
 .search-box-input {
+  flex: 1 1 auto;
+  min-width: 80px;
+  width: 100%;
   background: none;
   border: none;
   outline: none;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 0.85rem;
-  width: 100%;
+  font-size: 0.88rem;
+  padding: 0;
 }
 
 .search-box-input::-webkit-search-decoration,
@@ -1076,11 +1098,46 @@ body.tv-mode-active .screen-ambilight-wrapper {
 }
 
 /* Top User Actions */
+.top-nav-actions,
 .top-user-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+/* Hide redundant duplicate buttons from header */
+#btn-notifications,
+#btn-settings {
+  display: none !important;
+}
+
+/* Streamline user profile in header to circular avatar */
+.user-profile-pill .user-name,
+.user-profile-pill .chevron-icon {
+  display: none;
+}
+
+.user-profile-pill {
+  padding: 3px !important;
+  border-radius: 50% !important;
+}
+
+/* Responsive Top Header Actions */
+@media (max-width: 1400px) {
+  #btn-top-jukebox,
+  #btn-studio-subsonic {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1050px) {
+  #btn-studio-eq-top {
+    display: none !important;
+  }
+  .top-nav-bar {
+    gap: 12px;
+  }
 }
 
 .action-btn {
@@ -2011,6 +2068,7 @@ body.tv-mode-active .screen-ambilight-wrapper {
   .search-box-wrapper {
     width: auto;
     flex: 1;
+    min-width: 140px;
   }
 }
 
