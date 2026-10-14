@@ -19,7 +19,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=78">
+  <link rel="stylesheet" href="styles.css?v=80">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -1676,19 +1676,52 @@
   <!-- ====================================================================
        FULLSCREEN / MODAL SYNCHRONIZED LYRICS DRAWER
        ==================================================================== -->
-  <div id="lyrics-overlay" class="lyrics-overlay hidden" aria-modal="true" role="dialog">
+  <div id="lyrics-overlay" class="lyrics-overlay hidden" aria-modal="true" role="dialog" aria-label="Synchronized Lyrics Studio">
+    <!-- Spotify-Grade Ambient Aurora Light Orbs -->
+    <div class="lyrics-ambient-glow" aria-hidden="true">
+      <div class="lyrics-orb lyrics-orb-1"></div>
+      <div class="lyrics-orb lyrics-orb-2"></div>
+      <div class="lyrics-orb lyrics-orb-3"></div>
+    </div>
     <div class="lyrics-overlay-backdrop" id="lyrics-overlay-backdrop"></div>
-    <div class="lyrics-overlay-card">
+    <div class="lyrics-overlay-card" id="lyrics-overlay-card">
+      <!-- Glassmorphic Studio Navigation Header -->
       <div class="lyrics-overlay-header">
         <div class="lyrics-meta">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <h3 class="lyrics-track-title" id="lyrics-track-title">Butterfly Effect</h3>
-            <span class="karaoke-live-badge hidden" id="karaoke-live-badge">Karaoke Active</span>
-            <span class="karaoke-countdown-badge hidden" id="karaoke-countdown-badge">Singing starts in 5s</span>
+          <div class="lyrics-cover-container" id="lyrics-cover-container">
+            <img class="lyrics-cover-art" id="lyrics-cover-art" src="assets/default-cover.png" alt="Track cover" />
           </div>
-          <p class="lyrics-track-artist" id="lyrics-track-artist">Travis Scott</p>
+          <div class="lyrics-meta-text">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <h3 class="lyrics-track-title" id="lyrics-track-title">Butterfly Effect</h3>
+              <span class="lyrics-synced-badge" id="lyrics-synced-badge">
+                <span class="lyrics-live-dot"></span>
+                <span>Synced Lyrics</span>
+              </span>
+              <span class="karaoke-live-badge hidden" id="karaoke-live-badge">Karaoke Active</span>
+              <span class="karaoke-countdown-badge hidden" id="karaoke-countdown-badge">Singing starts in 5s</span>
+            </div>
+            <p class="lyrics-track-artist" id="lyrics-track-artist">Travis Scott</p>
+          </div>
         </div>
-        <div class="lyrics-header-actions" style="display:flex;align-items:center;gap:8px;">
+        <div class="lyrics-header-actions">
+          <button type="button" class="lyrics-action-btn font-size-btn" id="btn-lyrics-font-size" title="Toggle Lyrics Font Size (Normal / Large / Extra Large)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+              <path d="M4 19V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v12"></path>
+              <path d="M4 13h8"></path>
+              <path d="M16 19v-6a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5v6"></path>
+              <path d="M16 16h4"></path>
+            </svg>
+            <span id="lyrics-font-size-label">Aa</span>
+          </button>
+          <button type="button" class="lyrics-action-btn fullscreen-toggle-btn" id="btn-lyrics-fullscreen" title="Toggle Fullscreen Theater Mode">
+            <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            </svg>
+            <svg class="icon-compress hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+            </svg>
+          </button>
           <button type="button" class="lyrics-action-btn karaoke-toggle-btn" id="btn-toggle-karaoke" title="Toggle Karaoke Vocal Suppression Mode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
@@ -1706,12 +1739,76 @@
             <span>Import LRC</span>
           </button>
           <input type="file" id="lrc-file-input" accept=".lrc,.txt" style="display:none;">
-          <button class="close-overlay-btn" id="btn-close-lyrics-overlay">&times;</button>
+          <button class="close-overlay-btn" id="btn-close-lyrics-overlay" title="Close lyrics">&times;</button>
         </div>
       </div>
+
+      <!-- Main Scrollable Lyrics Body with Top/Bottom Gradient Mask -->
       <div class="lyrics-scroll-body" id="lyrics-scroll-body">
         <div class="lyrics-lines-wrapper" id="lyrics-lines-wrapper">
           <p class="lyrics-line-placeholder">Loading synced lyrics from LRCLIB...</p>
+        </div>
+        <!-- Musixmatch & LRCLIB Attribution Footer -->
+        <div class="lyrics-footer-credit" id="lyrics-footer-credit">
+          <div class="lyrics-credit-pill">
+            <span class="lyrics-credit-icon">♫</span>
+            <span>Lyrics provided by Musixmatch &amp; LRCLIB &bull; Real-time synchronized for SongBuddy</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spotify-Style Floating "Jump to Current" Sync Pill -->
+      <button type="button" id="lyrics-sync-pill" class="lyrics-sync-pill hidden" title="Jump to current playback position">
+        <span class="sync-pulse-dot"></span>
+        <span class="sync-label">Sync to playback</span>
+        <span id="lyrics-sync-time" class="sync-time-badge">0:00</span>
+      </button>
+
+      <!-- Integrated Theater Playback Bar (Visible in Fullscreen Mode) -->
+      <div class="lyrics-fs-player-bar hidden" id="lyrics-fs-player-bar">
+        <div class="lyrics-fs-progress-wrapper" id="lyrics-fs-progress-wrapper">
+          <span class="lyrics-fs-time" id="lyrics-fs-cur-time">0:00</span>
+          <div class="lyrics-fs-scrubber-track" id="lyrics-fs-scrubber-track">
+            <div class="lyrics-fs-scrubber-fill" id="lyrics-fs-scrubber-fill" style="width:0%;"></div>
+            <div class="lyrics-fs-scrubber-thumb" id="lyrics-fs-scrubber-thumb" style="left:0%;"></div>
+          </div>
+          <span class="lyrics-fs-time" id="lyrics-fs-dur-time">0:00</span>
+        </div>
+        <div class="lyrics-fs-controls-row">
+          <div class="lyrics-fs-track-info">
+            <span class="lyrics-fs-title-label" id="lyrics-fs-title-label">Butterfly Effect</span>
+            <span class="lyrics-fs-artist-label" id="lyrics-fs-artist-label">Travis Scott</span>
+          </div>
+          <div class="lyrics-fs-transport">
+            <button type="button" class="lyrics-fs-btn" id="lyrics-fs-btn-prev" title="Previous Track">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"></line>
+              </svg>
+            </button>
+            <button type="button" class="lyrics-fs-btn play-btn" id="lyrics-fs-btn-play" title="Play / Pause">
+              <svg class="fs-play-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <svg class="fs-pause-icon hidden" viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+              </svg>
+            </button>
+            <button type="button" class="lyrics-fs-btn" id="lyrics-fs-btn-next" title="Next Track">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="lyrics-fs-extra">
+            <button type="button" class="lyrics-fs-btn" id="lyrics-fs-btn-exit" title="Exit Fullscreen Mode">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2951,6 +3048,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=78"></script>
+  <script src="app.js?v=80"></script>
 </body>
 </html>

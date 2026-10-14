@@ -2631,8 +2631,8 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
 
             # Direct 307 redirect to Google Edge CDN for millisecond playback start and zero buffering delay
             # Triggered automatically on Vercel or when redirect requested, or when proxy not forced:
-            redirect_param = params.get("redirect", ["true"])[0].lower()
-            if os.getenv("VERCEL") or redirect_param != "false":
+            redirect_param = params.get("redirect", ["false" if not os.getenv("VERCEL") else "true"])[0].lower()
+            if (os.getenv("VERCEL") and redirect_param != "false") or redirect_param == "true":
                 self.send_response(307)
                 self.send_header("Location", stream_url)
                 self.send_header("Access-Control-Allow-Origin", "*")

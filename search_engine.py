@@ -451,13 +451,33 @@ class SpotifySearchEngine:
         # 2. Lyrics Channel Search
         lyrics_matches = self.search_lyrics_channel(q_clean)
         for lm in lyrics_matches:
-            if not any(c.get("title", "").lower() == lm["title"].lower() for c in candidates):
-                candidates.append(lm)
+            lm_title = (lm.get("title") or "").lower().strip()
+            matched = False
+            for c in candidates:
+                c_title = (c.get("title") or "").lower().strip()
+                if c.get("id") and (c_title == lm_title or lm_title in c_title or c_title in lm_title):
+                    c["is_lyrics_match"] = True
+                    c["matched_lyric"] = lm.get("matched_lyric")
+                    matched = True
+                    break
+            if not matched and external_fetcher:
+                try:
+                    resolved = external_fetcher(f"{lm['title']} {lm['artist']}", limit=1)
+                    if resolved and isinstance(resolved, list) and resolved[0].get("id"):
+                        yt_c = resolved[0]
+                        yt_c["is_lyrics_match"] = True
+                        yt_c["matched_lyric"] = lm.get("matched_lyric")
+                        candidates.append(yt_c)
+                except Exception as e:
+                    logger.debug(f"Could not resolve video ID for lyric match: {e}")
 
         # 3. Rights & Quality Gating
         valid_candidates = []
         seen_identities = set()
         for c in candidates:
+            # Enforce that every candidate track has a valid playable stream ID
+            if not c.get("id") or not str(c.get("id")).strip():
+                continue
             dur = c.get("duration")
             if dur and dur < 35 and "teaser" not in q_clean.lower() and "short" not in q_clean.lower():
                 continue
