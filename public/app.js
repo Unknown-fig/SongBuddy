@@ -97,6 +97,14 @@ const state = {
   shareModal: {
     selectedHours: 24,
     allowDownload: true
+  },
+  buddyFeed: {
+    isOpen: localStorage.getItem('songbuddy_buddy_feed_open') === 'true',
+    friends: [],
+    activeCount: 0,
+    privateSession: localStorage.getItem('songbuddy_private_session') === 'true',
+    pollTimer: null,
+    sseSource: null
   }
 };
 
@@ -787,6 +795,8 @@ async function initApp() {
   initSubsonicUI();
   initJukeboxUI();
   initShareLinkUI();
+  initBuddyFeedUI();
+  initSpotifyRecommendationsUI();
   handleUrlRouting();
   window.addEventListener('hashchange', handleUrlRouting);
   setupNetworkResilience();
@@ -915,6 +925,7 @@ function createTrackRow(track, rankNumber) {
     <span class="chart-rank">${rank}</span>
     <img src="${thumb}" alt="${escapeHTML(track.title)}" class="chart-thumb" loading="lazy" onerror="if(this.src.includes('hq720.jpg')){this.src=this.src.replace('hq720.jpg','hqdefault.jpg');}else{this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');}">
     <div class="chart-info">
+      ${track.is_lyrics_match ? `<span class="lyrics-match-pill" title="${escapeHTML(track.matched_lyric || 'Matches lyrics')}">Lyrics match</span>` : ''}
       <span class="chart-title">${escapeHTML(track.title)}</span>
       <span class="chart-artist">${escapeHTML(track.artist)}</span>
     </div>
@@ -1216,15 +1227,48 @@ async function searchDesktopInstantMatches(query) {
   desktopSearchAbort = new AbortController();
 
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=5`, {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=5&structured=true`, {
       signal: desktopSearchAbort.signal
     });
     if (!res.ok) return;
-    const tracks = await res.json();
+    const data = await res.json();
+    const isStructured = !Array.isArray(data) && data && data.tracks;
+    const tracks = isStructured ? data.tracks : (Array.isArray(data) ? data : []);
+    const topResult = isStructured ? data.top_result : null;
+
     if (Array.isArray(tracks) && tracks.length > 0) {
       section.classList.remove('hidden');
       container.innerHTML = '';
-      tracks.slice(0, 5).forEach(t => {
+
+      if (topResult) {
+        const topEl = document.createElement('div');
+        topEl.className = 'desktop-live-top-result';
+        const isArt = topResult.type === 'artist';
+        topEl.innerHTML = `
+          <img src="${topResult.thumbnail || generateFallbackCover(topResult.title, topResult.artist)}" class="desktop-live-top-thumb ${isArt ? 'is-artist' : ''}" onerror="this.onerror=null;this.src=generateFallbackCover('${escapeHTML(topResult.title)}','${escapeHTML(topResult.artist)}');">
+          <div class="desktop-live-top-meta">
+            <span class="desktop-live-top-badge">${topResult.badge || (isArt ? 'ARTIST' : 'TOP RESULT')}</span>
+            <span class="desktop-live-top-title">${escapeHTML(topResult.title)}</span>
+            <span class="desktop-live-top-sub">${escapeHTML(topResult.subtitle || topResult.artist)}</span>
+          </div>
+          <button type="button" class="desktop-live-top-play-btn" title="Play">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </button>
+        `;
+        topEl.addEventListener('click', () => {
+          saveRecentSearch(query);
+          if (topResult.track) {
+            playTrack(topResult.track);
+            showToastNotification(`Playing: ${topResult.track.title}`);
+          } else {
+            handleSearch(topResult.title, true);
+          }
+          closeDesktopSearchDropdown();
+        });
+        container.appendChild(topEl);
+      }
+
+      tracks.slice(0, 4).forEach(t => {
         const item = document.createElement('div');
         item.className = 'desktop-live-result-item';
         const thumb = t.thumbnail || generateFallbackCover(t.title, t.artist);
@@ -2134,6 +2178,16 @@ function togglePlayPause() {
 }
 
 function playNextTrack(isManual = false) {
+  // Record implicit feedback for Spotify BaRT contextual bandit
+  if (state.currentTrack && state.currentTrack.id) {
+    const curTime = audio ? (audio.currentTime || 0) : 0;
+    if (isManual && curTime < 25) {
+      reportRecommendationFeedback(state.currentTrack.id, 'skip', curTime);
+    } else if (curTime >= 25 || !isManual) {
+      reportRecommendationFeedback(state.currentTrack.id, 'stream', curTime);
+    }
+  }
+
   const currentId = state.currentTrack?.id;
   const playedSet = new Set([
     currentId,
@@ -2709,9 +2763,39 @@ window.closeLyrics = closeLyrics;
 
 // ============================================================================
 
+// ============================================================================
+// Spotify Client Architecture: In-Memory LRU Prefix Cache & Keystroke Pipeline
+// ============================================================================
+const SEARCH_LRU_MAX = 60;
+const searchLRUCache = new Map();
+
+function getSearchFromLRU(query) {
+  if (!query) return null;
+  const key = query.trim().toLowerCase();
+  if (searchLRUCache.has(key)) {
+    const val = searchLRUCache.get(key);
+    searchLRUCache.delete(key);
+    searchLRUCache.set(key, val);
+    return val;
+  }
+  return null;
+}
+
+function setSearchInLRU(query, results) {
+  if (!query || (!Array.isArray(results) && typeof results !== "object")) return;
+  const key = query.trim().toLowerCase();
+  if (searchLRUCache.has(key)) {
+    searchLRUCache.delete(key);
+  } else if (searchLRUCache.size >= SEARCH_LRU_MAX) {
+    const oldestKey = searchLRUCache.keys().next().value;
+    searchLRUCache.delete(oldestKey);
+  }
+  searchLRUCache.set(key, results);
+}
+
 function handleSearch(query, immediate = false) {
   if (!query || !query.trim()) {
-    // Keep user on search view and show discovery state
+    // Keep user on search view and show zero-query discovery state
     if (state.activeView === 'search') {
       renderSearchDiscoveryState();
     }
@@ -2740,7 +2824,23 @@ function handleSearch(query, immediate = false) {
   const titleEl = $('search-view-title');
   if (titleEl) titleEl.textContent = `Search Results: "${cleanQuery}"`;
 
-  if (loading) loading.classList.remove('hidden');
+  // 1. Instant LRU Cache Hit Check (Sub-millisecond instant render)
+  const cachedData = getSearchFromLRU(cleanQuery);
+  if (cachedData) {
+    if (Array.isArray(cachedData) && cachedData.length > 0) {
+      state.lastSearchResults = cachedData;
+      renderSearchResults(cachedData);
+      if (loading) loading.classList.add('hidden');
+      if (immediate) return;
+    } else if (cachedData.tracks && cachedData.tracks.length > 0) {
+      state.lastSearchResults = cachedData.tracks;
+      renderSearchResults(cachedData.tracks, cachedData.topResult, cachedData.artists, cachedData.albums);
+      if (loading) loading.classList.add('hidden');
+      if (immediate) return;
+    }
+  } else {
+    if (loading) loading.classList.remove('hidden');
+  }
 
   clearTimeout(state.searchDebounceTimer);
 
@@ -2751,14 +2851,21 @@ function handleSearch(query, immediate = false) {
     desktopSearchAbort = new AbortController();
 
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}&limit=20`, {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}&limit=20&structured=true`, {
         signal: desktopSearchAbort.signal
       });
       if (loading) loading.classList.add('hidden');
       if (!res.ok) throw new Error('Search failed with status ' + res.status);
-      const tracks = await res.json();
-      state.lastSearchResults = Array.isArray(tracks) ? tracks : [];
-      renderSearchResults(state.lastSearchResults);
+      const data = await res.json();
+      const isStructured = !Array.isArray(data) && data && data.tracks;
+      const tracks = isStructured ? data.tracks : (Array.isArray(data) ? data : []);
+      const topResult = isStructured ? data.top_result : null;
+      const artists = isStructured ? data.artists : [];
+      const albums = isStructured ? data.albums : [];
+
+      state.lastSearchResults = tracks;
+      setSearchInLRU(cleanQuery, { tracks, topResult, artists, albums });
+      renderSearchResults(tracks, topResult, artists, albums);
     } catch (err) {
       if (err.name === 'AbortError') return;
       if (loading) loading.classList.add('hidden');
@@ -2769,7 +2876,8 @@ function handleSearch(query, immediate = false) {
   if (immediate) {
     performSearch();
   } else {
-    state.searchDebounceTimer = setTimeout(performSearch, 300);
+    // Spotify-grade 200ms debounce
+    state.searchDebounceTimer = setTimeout(performSearch, 200);
   }
 }
 
@@ -2866,6 +2974,24 @@ function renderSearchDiscoveryState() {
           <div class="discovery-genre-card" data-query="Lo-Fi Chill Beats Study" style="--card-hue: 200deg;" role="button" tabindex="0">
             <span class="discovery-genre-name">Lo-Fi</span>
           </div>
+          <div class="discovery-genre-card" data-query="Classic Rock Anthems" style="--card-hue: 0deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Rock</span>
+          </div>
+          <div class="discovery-genre-card" data-query="R&B Soul Smooth Hits" style="--card-hue: 240deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">R&B / Soul</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Punjabi Hits Karan Aujla" style="--card-hue: 50deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Punjabi Wave</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Deep Focus Study Beats" style="--card-hue: 165deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Deep Focus</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Workout Energy Beast Mode" style="--card-hue: 15deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Workout</span>
+          </div>
+          <div class="discovery-genre-card" data-query="Chill Acoustic Coffee Vibes" style="--card-hue: 185deg;" role="button" tabindex="0">
+            <span class="discovery-genre-name">Chill Vibes</span>
+          </div>
         </div>
       </div>
     </div>
@@ -2899,14 +3025,13 @@ function renderSearchDiscoveryState() {
   }
 }
 
-function renderSearchResults(tracks) {
+function renderSearchResults(tracks, topResultOverride = null, artistsList = [], albumsList = []) {
   const container = $('search-results-list');
   if (!container) return;
   container.innerHTML = '';
 
   let list = tracks || [];
 
-  // Pre-warm the top 2 search results in background for instant millisecond playback if tapped
   if (Array.isArray(list) && list.length > 0) {
     list.slice(0, 2).forEach(t => {
       if (t && t.id) prewarmTrack(t.id);
@@ -2932,10 +3057,150 @@ function renderSearchResults(tracks) {
     return;
   }
 
-  list.forEach((track, index) => {
-    const row = createTrackRow(track, index + 1);
-    container.appendChild(row);
+  if (filter !== 'all' || list.length <= 1) {
+    list.forEach((track, index) => {
+      const row = createTrackRow(track, index + 1);
+      container.appendChild(row);
+    });
+    return;
+  }
+
+  // ============================================================================
+  // SPOTIFY-GRADE SECTIONED LAYOUT: Top Result Card + Songs List + Artists + Albums
+  // ============================================================================
+  const topResult = topResultOverride || {
+    type: list[0].entity_type === 'artist' ? 'artist' : 'track',
+    title: list[0].title,
+    artist: list[0].artist,
+    thumbnail: list[0].thumbnail,
+    badge: list[0].entity_type === 'artist' ? 'Artist' : 'Song',
+    subtitle: `${list[0].entity_type === 'artist' ? 'Artist' : 'Song • ' + list[0].artist}`,
+    track: list[0]
+  };
+
+  const isArtist = topResult.type === 'artist';
+  const badgeText = topResult.badge || (isArtist ? 'Artist' : 'Song');
+  const topThumb = topResult.thumbnail || generateFallbackCover(topResult.title, topResult.artist);
+
+  const songsSlice = (topResultOverride && topResult.type === 'artist') ? list.slice(0, 4) : list.slice(1, 5);
+  const remainingSlice = (topResultOverride && topResult.type === 'artist') ? list.slice(4) : list.slice(5);
+
+  const gridWrapper = document.createElement('div');
+  gridWrapper.className = 'spotify-search-top-row';
+
+  // 1. Left Column: Top Result High-Prominence Card
+  const topCol = document.createElement('div');
+  topCol.className = 'spotify-search-col';
+  topCol.innerHTML = `
+    <h3 class="spotify-search-section-header">Top result</h3>
+    <div class="spotify-top-result-card" role="button" tabindex="0" title="Play ${escapeHTML(topResult.title)}">
+      <div class="spotify-top-result-thumb-wrapper">
+        <img src="${topThumb}" alt="${escapeHTML(topResult.title)}" class="spotify-top-result-thumb ${isArtist ? 'is-artist' : 'is-track'}" loading="lazy" onerror="if(this.src.includes('hq720.jpg')){this.src=this.src.replace('hq720.jpg','hqdefault.jpg');}else{this.onerror=null;this.src=generateFallbackCover('${escapeHTML(topResult.title)}','${escapeHTML(topResult.artist)}');}">
+      </div>
+      <div class="spotify-top-result-info">
+        <div class="spotify-top-result-title">${escapeHTML(topResult.title)}</div>
+        <div class="spotify-top-result-meta">${escapeHTML(topResult.subtitle || topResult.artist)}</div>
+        <span class="spotify-top-result-badge">${badgeText}</span>
+      </div>
+      <button type="button" class="spotify-top-result-play-btn" title="Play" aria-label="Play ${escapeHTML(topResult.title)}">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+          <polygon points="6 4 20 12 6 20 6 4"></polygon>
+        </svg>
+      </button>
+    </div>
+  `;
+
+  // Attach click listener for Top Result card
+  const cardEl = topCol.querySelector('.spotify-top-result-card');
+  cardEl?.addEventListener('click', (e) => {
+    if (typeof saveRecentSearch === 'function') saveRecentSearch(currentQuery || topResult.title);
+    if (topResult.track) {
+      playTrack(topResult.track);
+      if (typeof showToastNotification === 'function') showToastNotification(`Playing: ${topResult.track.title}`);
+    } else if (list.length > 0) {
+      playTrack(list[0]);
+    }
   });
+
+  gridWrapper.appendChild(topCol);
+
+  // 2. Right Column: Songs Section
+  const songsCol = document.createElement('div');
+  songsCol.className = 'spotify-search-col';
+  songsCol.innerHTML = `<h3 class="spotify-search-section-header">Songs</h3>`;
+
+  const songsList = document.createElement('div');
+  songsList.className = 'spotify-songs-list';
+  songsSlice.forEach((track, idx) => {
+    const row = createTrackRow(track, (topResultOverride && topResult.type === 'artist') ? idx + 1 : idx + 2);
+    songsList.appendChild(row);
+  });
+  songsCol.appendChild(songsList);
+  gridWrapper.appendChild(songsCol);
+
+  container.appendChild(gridWrapper);
+
+  // 3. Multi-Entity Artists Row
+  if (Array.isArray(artistsList) && artistsList.length > 0) {
+    const artistsSection = document.createElement('div');
+    artistsSection.style.marginTop = '28px';
+    artistsSection.innerHTML = `<h3 class="spotify-search-section-header">Artists</h3>`;
+    const artistsRow = document.createElement('div');
+    artistsRow.className = 'spotify-search-artists-row';
+    artistsList.forEach(art => {
+      const artCard = document.createElement('div');
+      artCard.className = 'spotify-artist-card';
+      artCard.innerHTML = `
+        <img src="${art.avatar || generateFallbackCover(art.name, 'Artist')}" class="spotify-artist-avatar" alt="${escapeHTML(art.name)}" onerror="this.onerror=null;this.src=generateFallbackCover('${escapeHTML(art.name)}','Artist');">
+        <span class="spotify-artist-name">${escapeHTML(art.name)}</span>
+        <span class="spotify-artist-sub">${escapeHTML(art.plays || 'Artist')}</span>
+      `;
+      artCard.addEventListener('click', () => {
+        handleSearch(art.name, true);
+      });
+      artistsRow.appendChild(artCard);
+    });
+    artistsSection.appendChild(artistsRow);
+    container.appendChild(artistsSection);
+  }
+
+  // 4. Multi-Entity Albums Row
+  if (Array.isArray(albumsList) && albumsList.length > 0) {
+    const albumsSection = document.createElement('div');
+    albumsSection.style.marginTop = '28px';
+    albumsSection.innerHTML = `<h3 class="spotify-search-section-header">Albums & Singles</h3>`;
+    const albumsRow = document.createElement('div');
+    albumsRow.className = 'spotify-search-albums-row';
+    albumsList.forEach(alb => {
+      const albCard = document.createElement('div');
+      albCard.className = 'spotify-album-card';
+      albCard.innerHTML = `
+        <img src="${alb.thumbnail || generateFallbackCover(alb.title, alb.artist)}" class="spotify-album-thumb" alt="${escapeHTML(alb.title)}" onerror="this.onerror=null;this.src=generateFallbackCover('${escapeHTML(alb.title)}','${escapeHTML(alb.artist)}');">
+        <span class="spotify-album-title">${escapeHTML(alb.title)}</span>
+        <span class="spotify-album-artist">${escapeHTML(alb.artist)}</span>
+      `;
+      albCard.addEventListener('click', () => {
+        handleSearch(`${alb.title} ${alb.artist}`, true);
+      });
+      albumsRow.appendChild(albCard);
+    });
+    albumsSection.appendChild(albumsRow);
+    container.appendChild(albumsSection);
+  }
+
+  // 5. Remaining Songs
+  if (remainingSlice.length > 0) {
+    const moreSection = document.createElement('div');
+    moreSection.style.marginTop = '28px';
+    moreSection.innerHTML = `<h3 class="spotify-search-section-header">More Songs</h3>`;
+    const moreList = document.createElement('div');
+    remainingSlice.forEach((track, idx) => {
+      const row = createTrackRow(track, (topResultOverride && topResult.type === 'artist') ? idx + 5 : idx + 6);
+      moreList.appendChild(row);
+    });
+    moreSection.appendChild(moreList);
+    container.appendChild(moreSection);
+  }
 }
 
 // ============================================================================
@@ -3136,6 +3401,7 @@ function toggleLike(track) {
     state.likedTracks.splice(existsIdx, 1);
   } else {
     state.likedTracks.unshift(track);
+    reportRecommendationFeedback(track.id, 'favorite', audio ? (audio.currentTime || 0) : 0);
   }
 
   localStorage.setItem('songbuddy_liked_tracks', JSON.stringify(state.likedTracks));
@@ -6055,9 +6321,11 @@ function setupAudioListeners() {
 
   audio.addEventListener('play', () => {
     if (!isYTActive) updatePlayPauseIcons(true);
+    broadcastUserPlaybackActivity(true);
   });
   audio.addEventListener('pause', () => {
     if (!isYTActive) updatePlayPauseIcons(false);
+    broadcastUserPlaybackActivity(false);
   });
   audio.addEventListener('error', () => {
     if (isYTActive) return;
@@ -6734,6 +7002,21 @@ function setupEventListeners() {
           openLyrics();
         }
         return;
+      }
+
+      // 'B' -> Buddy Feed / Friend Activity toggle
+      if (e.key.toLowerCase() === 'b' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleBuddyFeed();
+        return;
+      }
+
+      // Escape -> Close Buddy Feed if open
+      if (e.key === 'Escape') {
+        if ($('buddy-feed-drawer-overlay') && !$('buddy-feed-drawer-overlay').classList.contains('hidden')) {
+          toggleBuddyFeed(false);
+          return;
+        }
       }
 
       // '?' -> Shortcuts Modal
@@ -8364,6 +8647,473 @@ async function handleUrlRouting() {
     } catch (err) {
       showToastNotification('Error resolving shared link');
     }
+  }
+}
+
+// ============================================================================
+// BUDDY FEED / FRIEND ACTIVITY ENGINE (SPOTIFY CLIENT ARCHITECTURE)
+// ============================================================================
+
+function initBuddyFeedUI() {
+  const btnTopBuddy = $('btn-top-buddy-feed');
+  const navBuddy = $('nav-buddy-feed');
+  const btnClose = $('btn-close-buddy-feed');
+  const backdrop = $('buddy-feed-backdrop');
+  const btnRefresh = $('btn-buddy-refresh');
+  const btnPrivacy = $('btn-buddy-privacy');
+  const btnAddFriend = $('btn-buddy-add-friend');
+  const btnSubmitAdd = $('btn-submit-add-friend');
+  const inputAddFriend = $('input-add-friend');
+
+  btnTopBuddy?.addEventListener('click', () => toggleBuddyFeed());
+  navBuddy?.addEventListener('click', () => toggleBuddyFeed(true));
+  btnClose?.addEventListener('click', () => toggleBuddyFeed(false));
+  backdrop?.addEventListener('click', () => toggleBuddyFeed(false));
+
+  btnRefresh?.addEventListener('click', () => {
+    fetchBuddyFeed();
+    showToastNotification('Refreshed Friend Activity');
+  });
+
+  btnPrivacy?.addEventListener('click', async () => {
+    state.buddyFeed.privateSession = !state.buddyFeed.privateSession;
+    localStorage.setItem('songbuddy_private_session', state.buddyFeed.privateSession ? 'true' : 'false');
+    updateBuddyPrivacyUI();
+    try {
+      await fetch('/api/social/privacy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ private_session: state.buddyFeed.privateSession })
+      });
+    } catch (e) {
+      console.warn('[Buddy Privacy Sync Error]', e);
+    }
+    showToastNotification(
+      state.buddyFeed.privateSession 
+        ? 'Private Session Enabled (Listening activity hidden)' 
+        : 'Public Listening Restored (Broadcasting to friends)'
+    );
+  });
+
+  btnAddFriend?.addEventListener('click', () => {
+    const bar = $('buddy-add-bar');
+    if (bar) {
+      bar.classList.toggle('hidden');
+      if (!bar.classList.contains('hidden')) {
+        inputAddFriend?.focus();
+      }
+    }
+  });
+
+  btnSubmitAdd?.addEventListener('click', () => submitFollowFriend());
+  inputAddFriend?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitFollowFriend();
+  });
+
+  updateBuddyPrivacyUI();
+  fetchBuddyFeed();
+  setupBuddyFeedDealerSSE();
+
+  // Periodic fallback polling every 25 seconds
+  if (state.buddyFeed.pollTimer) clearInterval(state.buddyFeed.pollTimer);
+  state.buddyFeed.pollTimer = setInterval(fetchBuddyFeed, 25000);
+}
+
+function updateBuddyPrivacyUI() {
+  const lbl = $('buddy-privacy-label');
+  const eye = $('buddy-privacy-eye');
+  if (state.buddyFeed.privateSession) {
+    if (lbl) lbl.textContent = 'Private';
+    if (eye) eye.style.stroke = '#f87171';
+  } else {
+    if (lbl) lbl.textContent = 'Public';
+    if (eye) eye.style.stroke = '#10b981';
+  }
+}
+
+async function submitFollowFriend() {
+  const input = $('input-add-friend');
+  const name = (input?.value || '').trim();
+  if (!name) return;
+  const fid = 'usr_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  try {
+    const res = await fetch('/api/social/friends/follow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ friend_id: fid, friend_name: name })
+    });
+    if (res.ok) {
+      if (input) input.value = '';
+      $('buddy-add-bar')?.classList.add('hidden');
+      showToastNotification(`Now following ${name}!`);
+      await fetchBuddyFeed();
+    }
+  } catch (err) {
+    showToastNotification('Failed to add friend');
+  }
+}
+
+function toggleBuddyFeed(forceOpen = null) {
+  const overlay = $('buddy-feed-drawer-overlay');
+  if (!overlay) return;
+
+  const shouldOpen = forceOpen !== null ? forceOpen : overlay.classList.contains('hidden');
+  state.buddyFeed.isOpen = shouldOpen;
+  localStorage.setItem('songbuddy_buddy_feed_open', shouldOpen ? 'true' : 'false');
+
+  if (shouldOpen) {
+    overlay.classList.remove('hidden');
+    fetchBuddyFeed();
+  } else {
+    overlay.classList.add('hidden');
+  }
+}
+
+async function fetchBuddyFeed() {
+  try {
+    const res = await fetch('/api/social/buddy-feed');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.status === 'success' && Array.isArray(data.feed)) {
+      state.buddyFeed.friends = data.feed;
+      state.buddyFeed.activeCount = data.stats?.active_listening_count || 0;
+      renderBuddyFeedUI(data.feed, data.stats);
+    }
+  } catch (err) {
+    console.debug('[Buddy Feed Fetch Error]', err);
+  }
+}
+
+function renderBuddyFeedUI(feed, stats = {}) {
+  const list = $('buddy-activity-list');
+  const topBadge = $('buddy-top-count');
+  const navBadge = $('buddy-nav-badge');
+  const headerStatus = $('buddy-active-listeners-text');
+
+  const activeCount = stats.active_listening_count !== undefined 
+    ? stats.active_listening_count 
+    : feed.filter(f => f.equalizer_active).length;
+
+  if (topBadge) topBadge.textContent = String(activeCount);
+  if (navBadge) navBadge.textContent = String(activeCount);
+  if (headerStatus) headerStatus.textContent = `${activeCount} listening now`;
+
+  if (!list) return;
+  if (!feed || feed.length === 0) {
+    list.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;color:#71717a;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="42" height="42" style="margin-bottom:12px;opacity:0.6;">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+        </svg>
+        <p style="font-size:0.9rem;font-weight:600;color:#e4e4e7;">No friend activity yet</p>
+        <p style="font-size:0.75rem;margin-top:4px;">Tap '+ Follow' above to add companions.</p>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = feed.map(item => {
+    const isPlaying = item.is_playing && item.equalizer_active;
+    const dotClass = isPlaying ? 'buddy-online-dot' : 'buddy-online-dot paused';
+    const eqHtml = isPlaying ? `
+      <div class="buddy-equalizer" title="Currently Playing">
+        <span class="buddy-eq-bar"></span>
+        <span class="buddy-eq-bar"></span>
+        <span class="buddy-eq-bar"></span>
+      </div>
+    ` : `
+      <span style="font-size:0.7rem;color:#71717a;">Paused</span>
+    `;
+
+    return `
+      <div class="buddy-item-card" data-friend-id="${item.user_id}">
+        <div class="buddy-avatar-wrap">
+          <img class="buddy-avatar-img" src="${item.avatar}" alt="${item.display_name}" onerror="this.src='https://api.dicebear.com/7.x/identicon/svg?seed=${item.user_id}'">
+          <span class="${dotClass}"></span>
+        </div>
+        <div class="buddy-info-col">
+          <div class="buddy-name-row">
+            <span class="buddy-friend-name" title="${item.display_name}">${item.display_name}</span>
+            <span class="buddy-time-badge">${item.time_ago_str}</span>
+          </div>
+          <div class="buddy-track-row">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style="color:#10b981;flex-shrink:0;">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+            </svg>
+            <span class="buddy-track-title" title="${item.title}" onclick="listenAlongWithFriend('${item.user_id}')">${item.title}</span>
+          </div>
+          <div class="buddy-artist-row">
+            <span>${item.artist}</span>
+            <span style="opacity:0.4;">•</span>
+            <span class="buddy-album-name" title="${item.album}">${item.album}</span>
+          </div>
+          <div class="buddy-card-actions">
+            ${eqHtml}
+            <button type="button" class="btn-listen-along" onclick="listenAlongWithFriend('${item.user_id}')" title="Listen along with ${item.display_name}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <span>Listen Along</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function listenAlongWithFriend(friendId) {
+  try {
+    const res = await fetch(`/api/social/sync?friend_id=${encodeURIComponent(friendId)}`);
+    if (!res.ok) {
+      showToastNotification('Could not sync with friend');
+      return;
+    }
+    const data = await res.json();
+    const track = data?.sync?.track;
+    const friendName = data?.sync?.friend_name || 'Friend';
+    if (track && track.id) {
+      const fullTrack = {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album || 'Single',
+        thumbnail: track.thumbnail || `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`,
+        duration_formatted: track.duration ? `${Math.floor(track.duration / 60)}:${String(track.duration % 60).padStart(2, '0')}` : '3:30'
+      };
+      playTrack(fullTrack);
+      showToastNotification(`🎧 Listening along with ${friendName}: ${track.title}`);
+    }
+  } catch (err) {
+    showToastNotification('Sync connection error');
+  }
+}
+
+let lastBroadcastTs = 0;
+async function broadcastUserPlaybackActivity(isPlaying = true) {
+  if (state.buddyFeed && state.buddyFeed.privateSession) return;
+  if (!state.currentTrack || !state.currentTrack.id) return;
+
+  const now = Date.now();
+  if (now - lastBroadcastTs < 2000) return; // Debounce
+  lastBroadcastTs = now;
+
+  try {
+    const payload = {
+      track: {
+        id: state.currentTrack.id,
+        title: state.currentTrack.title || 'Untitled',
+        artist: state.currentTrack.artist || 'Unknown Artist',
+        album: state.currentTrack.album || 'SongBuddy Studio',
+        thumbnail: state.currentTrack.thumbnail || '',
+        duration: audio?.duration || 0
+      },
+      is_playing: Boolean(isPlaying),
+      progress: Math.floor(audio?.currentTime || 0)
+    };
+    await fetch('/api/social/activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    console.debug('[Broadcast Playback Activity Error]', e);
+  }
+}
+
+function setupBuddyFeedDealerSSE() {
+  if (window.EventSource) {
+    try {
+      if (state.buddyFeed.sseSource) {
+        state.buddyFeed.sseSource.close();
+      }
+      const sse = new EventSource('/api/social/buddy-feed/stream');
+      state.buddyFeed.sseSource = sse;
+      sse.addEventListener('buddy_feed', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.feed) {
+            renderBuddyFeedUI(data.feed, data.stats);
+          }
+        } catch (ex) {}
+      });
+      sse.onerror = () => {
+        sse.close();
+      };
+    } catch (e) {
+      console.debug('[SSE Setup Fallback to REST]', e);
+    }
+  }
+}
+
+// ============================================================================
+// Spotify Recommendation Engine UI & BaRT Contextual Bandits
+// ============================================================================
+
+function reportRecommendationFeedback(trackId, action, listenSeconds = 0) {
+  if (!trackId) return;
+  const user = state.currentUser?.username || 'dave';
+  fetch('/api/recommendations/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: user,
+      track_id: trackId,
+      action: action,
+      listen_seconds: Math.round(listenSeconds)
+    })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.feedback && data.feedback.momentum_state) {
+        updateBartMomentumBadge(data.feedback.momentum_state, data.feedback.exploration_rate);
+      }
+    })
+    .catch(() => {});
+}
+
+function updateBartMomentumBadge(momentumState, explorationRate) {
+  const badge = $('bart-momentum-badge');
+  const text = $('bart-status-text');
+  if (!badge || !text) return;
+  if (momentumState === 'recovery_conservative') {
+    badge.classList.add('conservative');
+    text.textContent = 'BaRT Bandit: Safe Favorites Mode (0% Exploration)';
+  } else if (momentumState === 'cautious') {
+    badge.classList.remove('conservative');
+    text.textContent = 'BaRT Bandit: Cautious Exploration';
+  } else {
+    badge.classList.remove('conservative');
+    const pct = Math.round((explorationRate || 0.10) * 100);
+    text.textContent = `BaRT Bandit: Exploratory (~${pct}% Novelty)`;
+  }
+}
+
+function renderDiscoverWeeklyBanner(dw) {
+  const tracks = dw.tracks || [];
+  const previewContainer = $('dw-preview-tracks');
+  if (previewContainer && tracks.length > 0) {
+    previewContainer.innerHTML = tracks.slice(0, 3).map((t, idx) => `
+      <div class="dw-preview-chip" data-track-id="${t.id}" data-idx="${idx}" title="Listen to ${escapeHTML(t.title)}">
+        <img src="${t.thumbnail || `https://i.ytimg.com/vi/${t.id}/hqdefault.jpg`}" class="dw-chip-thumb" alt="${escapeHTML(t.title)}" loading="lazy">
+        <div class="dw-chip-info">
+          <div class="dw-chip-title">${escapeHTML(t.title)}</div>
+          <div class="dw-chip-artist">${escapeHTML(t.artist)}</div>
+        </div>
+        <span class="dw-chip-novelty">${Math.round((t.novelty_score || 0.8) * 100)}% New</span>
+      </div>
+    `).join('');
+
+    previewContainer.querySelectorAll('.dw-preview-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const idx = parseInt(chip.dataset.idx, 10);
+        const trk = tracks[idx];
+        if (trk) {
+          playTrack({
+            id: trk.id,
+            title: trk.title,
+            artist: trk.artist,
+            thumbnail: trk.thumbnail,
+            duration: trk.duration,
+            duration_formatted: trk.duration_formatted
+          }, { startRadio: true });
+          showToastNotification(`Playing discovery candidate: ${trk.title}`);
+        }
+      });
+    });
+  }
+
+  const btnPlay = $('btn-play-discover-weekly');
+  if (btnPlay) {
+    btnPlay.onclick = () => {
+      if (tracks.length === 0) return;
+      const formattedTracks = tracks.map(t => ({
+        id: t.id,
+        title: t.title,
+        artist: t.artist,
+        thumbnail: t.thumbnail,
+        duration: t.duration,
+        duration_formatted: t.duration_formatted
+      }));
+      state.queue = formattedTracks.slice(1);
+      saveQueueToStorage();
+      updateQueueBadge();
+      renderQueueDrawer();
+      playTrack(formattedTracks[0], { startRadio: true });
+      showToastNotification(`Playing Discover Weekly (${tracks.length} high-novelty songs)`);
+    };
+  }
+}
+
+function renderDailyMixesGrid(mixes) {
+  const grid = $('spotify-made-for-grid');
+  if (!grid || !mixes || mixes.length === 0) return;
+
+  grid.innerHTML = mixes.map(mix => `
+    <div class="songbuddy-card spotify-album-card spotify-daily-mix-card" data-mix-id="${mix.id}" style="--mix-accent: ${mix.color || '#10b981'};">
+      <div class="card-artwork-box spotify-album-artwork-wrap" style="background: radial-gradient(circle at 70% 30%, ${mix.color}33 0%, #000 80%);">
+        <img src="/assets/spotify_covers/${mix.id}.svg?v=v3_studio" alt="${escapeHTML(mix.title)}" class="card-art-img spotify-album-art" onerror="this.src='/assets/spotify_covers/daily_mix_1.svg';" loading="lazy">
+        <div class="card-overlay-actions">
+          <button class="card-btn-play spotify-floating-play-btn" title="Play ${escapeHTML(mix.title)}" aria-label="Play ${escapeHTML(mix.title)}">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+              <polygon points="7 4 20 12 7 20 7 4"></polygon>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <h4 class="card-title spotify-album-title">${escapeHTML(mix.title)}</h4>
+      <p class="card-desc spotify-album-desc">${escapeHTML(mix.subtitle)}</p>
+      <span class="daily-mix-tag-badge" style="color: ${mix.color || '#fff'}; border-color: ${mix.color}55;">${escapeHTML(mix.tag)}</span>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('.spotify-daily-mix-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      const mixId = card.dataset.mixId;
+      const foundMix = mixes.find(m => m.id === mixId);
+      if (foundMix && foundMix.tracks && foundMix.tracks.length > 0) {
+        const formattedTracks = foundMix.tracks.map(t => ({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          thumbnail: t.thumbnail,
+          duration: t.duration,
+          duration_formatted: t.duration_formatted
+        }));
+        state.queue = formattedTracks.slice(1);
+        saveQueueToStorage();
+        updateQueueBadge();
+        renderQueueDrawer();
+        playTrack(formattedTracks[0], { startRadio: true });
+        showToastNotification(`Playing ${foundMix.title}: ${foundMix.tag}`);
+      }
+    });
+  });
+}
+
+async function initSpotifyRecommendationsUI() {
+  const user = state.currentUser?.username || 'dave';
+  try {
+    const [mixResp, dwResp, ctxResp] = await Promise.all([
+      fetch(`/api/recommendations/daily-mixes?user_id=${encodeURIComponent(user)}`).then(r => r.json()).catch(() => null),
+      fetch(`/api/recommendations/discover-weekly?user_id=${encodeURIComponent(user)}`).then(r => r.json()).catch(() => null),
+      fetch(`/api/recommendations/context?user_id=${encodeURIComponent(user)}`).then(r => r.json()).catch(() => null)
+    ]);
+
+    if (ctxResp && ctxResp.context) {
+      updateBartMomentumBadge(ctxResp.context.momentum_state, ctxResp.context.exploration_rate);
+    }
+
+    if (dwResp && dwResp.discover_weekly) {
+      renderDiscoverWeeklyBanner(dwResp.discover_weekly);
+    }
+
+    if (mixResp && mixResp.mixes && mixResp.mixes.length > 0) {
+      renderDailyMixesGrid(mixResp.mixes);
+    }
+  } catch (err) {
+    console.debug('[Spotify Rec UI Init Error]', err);
   }
 }
 

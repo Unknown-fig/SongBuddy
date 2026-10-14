@@ -51,6 +51,8 @@ from social_jukebox import (
     generate_qr_svg
 )
 from recommender import recommendation_engine
+from search_engine import search_engine
+from buddy_feed import buddy_feed_manager
 
 # Track server start time
 SERVER_START_TIME = time.time()
@@ -696,17 +698,63 @@ def resolve_stream_url(video_id: str, quality: str = "high", force_refresh: bool
     finally:
         vlock.release()
 
-def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
-    """Searches YouTube using fast flat extraction with intelligent title cleaning and candidate ranking."""
-    q_clean = query.strip()
-    if not q_clean:
-        return []
+def score_search_candidate(cand: Dict[str, Any], query: str) -> float:
+    """
+    Learning to Rank (LTR) candidate scorer inspired by Spotify's multi-stage ranker.
+    Evaluates textual relevance, exact/prefix entity alignment, duration plausibility,
+    and metadata quality signals.
+    """
+    q_norm = query.strip().lower()
+    if not q_norm:
+        return 0.0
 
-    cache_key = (q_clean.lower(), limit)
-    cached = SEARCH_CACHE.get(cache_key)
-    if cached:
-        return cached
+    title_norm = (cand.get("title") or "").strip().lower()
+    artist_norm = (cand.get("artist") or "").strip().lower()
+    score = 0.0
 
+    # 1. Exact & Prefix Matches (Highest priority)
+    if q_norm == title_norm:
+        score += 200.0
+    elif title_norm.startswith(q_norm):
+        score += 110.0
+    elif q_norm in title_norm:
+        score += 55.0
+
+    if q_norm == artist_norm:
+        score += 180.0
+    elif artist_norm.startswith(q_norm):
+        score += 95.0
+    elif q_norm in artist_norm:
+        score += 45.0
+
+    # 2. Sub-word & token coverage (BM25 lexical approximation)
+    q_tokens = set(re.findall(r'\w+', q_norm))
+    cand_tokens = set(re.findall(r'\w+', f"{title_norm} {artist_norm}"))
+    if q_tokens:
+        overlap = len(q_tokens & cand_tokens) / len(q_tokens)
+        score += overlap * 70.0
+
+    # 3. Audio Duration Plausibility (Standard song length vs teasers/compilations)
+    duration = cand.get("duration")
+    if duration:
+        if 90 <= duration <= 360:
+            score += 30.0  # Prime radio/single length
+        elif 60 <= duration <= 500:
+            score += 15.0
+        elif duration < 40:
+            score -= 60.0  # Teaser or clip
+        elif duration > 900 and "mix" not in q_norm and "loop" not in q_norm:
+            score -= 40.0  # 15+ min compilation or live stream unless searched
+
+    # 4. Album context boost
+    album_norm = (cand.get("album") or "").strip().lower()
+    if album_norm and album_norm != "single":
+        if q_norm in album_norm:
+            score += 25.0
+
+    return score
+
+def _raw_fetch_youtube_candidates(query: str, limit: int = 25) -> List[Dict[str, Any]]:
     with EXTRACTION_SEMAPHORE:
         ydl_opts = {
             'quiet': True,
@@ -716,9 +764,9 @@ def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
         }
 
         tracks = []
-        fetch_count = min(limit + 8, 25)
+        fetch_count = min(limit + 8, 30)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            res = ydl.extract_info(f"ytsearch{fetch_count}:{q_clean}", download=False)
+            res = ydl.extract_info(f"ytsearch{fetch_count}:{query}", download=False)
             entries = res.get("entries", [])
             for entry in entries:
                 vid_id = entry.get("id")
@@ -726,8 +774,7 @@ def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
                     continue
 
                 duration = entry.get("duration")
-                # Filter out teaser clips under 35 seconds (unless requested in query)
-                if duration and duration < 35 and "teaser" not in q_clean.lower() and "short" not in q_clean.lower():
+                if duration and duration < 35 and "teaser" not in query.lower() and "short" not in query.lower():
                     continue
 
                 thumbnails = entry.get("thumbnails") or []
@@ -738,12 +785,11 @@ def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
                 raw_title = entry.get("title", "Unknown Track")
                 raw_artist = entry.get("artist") or entry.get("creator") or entry.get("channel") or entry.get("uploader") or "Unknown Artist"
                 raw_desc = entry.get("description", "") or ""
-                cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_artist, query=q_clean, description=raw_desc)
+                cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_artist, query=query, description=raw_desc)
 
-                # Attempt to extract album / soundtrack if indicated
                 album = entry.get("album")
                 if not album:
-                    album_match = re.search(r'(?i)\b(?:from|soundtrack|film)\s+["\']?([^"\'|()]+)["\']?', raw_title)
+                    album_match = re.search(r'''(?i)\b(?:from|soundtrack|film)\s+['"]?([^'"|()]+)['"]?''', raw_title)
                     album = album_match.group(1).strip() if album_match else "Single"
 
                 tracks.append({
@@ -756,11 +802,30 @@ def search_tracks(query: str, limit: int = 15) -> List[Dict[str, Any]]:
                     "thumbnail": thumb
                 })
 
-                if len(tracks) >= limit:
-                    break
-
-        SEARCH_CACHE.set(cache_key, tracks)
         return tracks
+
+
+def search_tracks(query: str, limit: int = 15, structured: bool = False, user_id: Optional[str] = None) -> Any:
+    """Searches YouTube and multi-channel indexes using Spotify-modeled candidate ranking."""
+    q_clean = query.strip()
+    if not q_clean:
+        return {"top_result": None, "tracks": [], "artists": [], "albums": [], "query": ""} if structured else []
+
+    cache_key = (q_clean.lower(), limit, structured, user_id or "")
+    cached = SEARCH_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    result = search_engine.search(
+        q_clean,
+        user_id=user_id,
+        limit=limit,
+        structured=structured,
+        external_fetcher=_raw_fetch_youtube_candidates
+    )
+
+    SEARCH_CACHE.set(cache_key, result)
+    return result
 
 # Regional & Linguistic Context Detection
 HINDI_SCRIPT_RE = re.compile(r'[\u0900-\u097F\u0A00-\u0A7F\u0980-\u09FF\u0B80-\u0BFF\u0C00-\u0C7F\u0600-\u06FF]')
@@ -1957,6 +2022,79 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             self.send_json_response(minted, status=201)
             return
 
+        # 14. Buddy Feed: Broadcast Real-Time Listening Activity (Spotify Dealer Model)
+        elif path == "/api/social/activity":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = user.get("sub", "dave")
+            user_rec = USERS_DB.get(uid, {})
+            name = user_rec.get("name") or post_data.get("display_name") or uid.capitalize()
+            avatar = post_data.get("avatar") or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
+            track = post_data.get("track", {})
+            is_playing = bool(post_data.get("is_playing", True))
+            progress = int(post_data.get("progress", 0))
+            activity = buddy_feed_manager.update_user_activity(
+                user_id=uid,
+                display_name=name,
+                avatar=avatar,
+                track_data=track,
+                is_playing=is_playing,
+                progress_seconds=progress
+            )
+            self.send_json_response({"status": "success", "activity": activity})
+            return
+
+        # 15. Buddy Feed: Follow / Unfollow Friend
+        elif path == "/api/social/friends/follow":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = user.get("sub", "dave")
+            friend_id = post_data.get("friend_id", "").strip()
+            friend_name = post_data.get("friend_name", "").strip()
+            if not friend_id:
+                self.send_json_error(400, "Missing friend_id.")
+                return
+            success = buddy_feed_manager.follow_friend(uid, friend_id, friend_name=friend_name)
+            self.send_json_response({"status": "success", "followed": success, "friend_id": friend_id})
+            return
+
+        elif path == "/api/social/friends/unfollow":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = user.get("sub", "dave")
+            friend_id = post_data.get("friend_id", "").strip()
+            if not friend_id:
+                self.send_json_error(400, "Missing friend_id.")
+                return
+            success = buddy_feed_manager.unfollow_friend(uid, friend_id)
+            self.send_json_response({"status": "success", "unfollowed": success, "friend_id": friend_id})
+            return
+
+        # 16. Buddy Feed: Toggle Private Session
+        elif path == "/api/social/privacy":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = user.get("sub", "dave")
+            private_session = bool(post_data.get("private_session", False))
+            is_private = buddy_feed_manager.set_private_session(uid, private_session)
+            self.send_json_response({"status": "success", "private_session": is_private})
+            return
+
+        # 17. Recommendation Engine: Record Implicit Feedback (BaRT Multi-Armed Bandit update)
+        elif path == "/api/recommendations/feedback":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = post_data.get("user_id") or user.get("sub", "dave")
+            track_id = post_data.get("track_id", "").strip()
+            action = post_data.get("action", "stream").strip()
+            listen_seconds = int(post_data.get("listen_seconds", 0))
+            if not track_id:
+                self.send_json_error(400, "Missing track_id.")
+                return
+            result = recommendation_engine.record_feedback(
+                user_id=uid,
+                track_id=track_id,
+                action=action,
+                listen_seconds=listen_seconds
+            )
+            self.send_json_response({"status": "success", "feedback": result})
+            return
+
         self.send_error(404, "Endpoint not found.")
 
     def do_DELETE(self):
@@ -2021,8 +2159,12 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             "/api/sponsorblock", "/api/cookies/rotate",
             "/api/jukebox/room", "/api/jukebox/queue", "/api/jukebox/vote", "/api/jukebox/next", "/api/jukebox/qr",
             "/api/share/mint", "/api/share/resolve", "/api/recommendations",
+            "/api/recommendations/daily-mixes", "/api/recommendations/discover-weekly",
+            "/api/recommendations/feedback", "/api/recommendations/context",
             "/api/user/playlists", "/api/user/favorites", "/api/user/history",
-            "/api/user/smart-playlists", "/api/import/playlist"
+            "/api/user/smart-playlists", "/api/import/playlist",
+            "/api/social/buddy-feed", "/api/social/buddy-feed/stream", "/api/social/sync", "/api/social/privacy",
+            "/api/social/activity", "/api/social/friends/follow", "/api/social/friends/unfollow"
         }
 
         if path.startswith("/api/"):
@@ -2146,6 +2288,77 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             self.send_json_response(res, status=status_code)
             return
 
+        # 0g. API: Buddy Feed / Friend Activity (Spotify buddy-feed.spa)
+        elif path == "/api/social/buddy-feed":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = user.get("sub", "dave")
+            try:
+                limit = int(params.get("limit", ["20"])[0])
+            except (ValueError, TypeError):
+                limit = 20
+            feed = buddy_feed_manager.get_feed(user_id=uid, limit=limit)
+            stats = buddy_feed_manager.get_summary_stats(user_id=uid)
+            self.send_json_response({
+                "status": "success",
+                "feed": feed,
+                "stats": stats
+            })
+            return
+
+        # 0h. API: Buddy Feed - 1-Click "Listen Along" Playback Sync
+        elif path == "/api/social/sync":
+            friend_id = params.get("friend_id", [""])[0]
+            if not friend_id:
+                self.send_json_error(400, "Missing 'friend_id' parameter.")
+                return
+            sync_data = buddy_feed_manager.get_listen_along(friend_id)
+            if not sync_data:
+                self.send_json_error(404, f"Friend '{friend_id}' activity not found.")
+                return
+            self.send_json_response({
+                "status": "success",
+                "sync": sync_data
+            })
+            return
+
+        # 0i. API: Buddy Feed - Privacy Setting Status
+        elif path == "/api/social/privacy":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = user.get("sub", "dave")
+            self.send_json_response({
+                "status": "success",
+                "private_session": buddy_feed_manager.is_private_session(uid)
+            })
+            return
+
+        # 0j. API: Buddy Feed Real-Time SSE Stream (Spotify Dealer Push Protocol)
+        elif path == "/api/social/buddy-feed/stream":
+            user = self.authenticate_request() or {"sub": "dave"}
+            uid = user.get("sub", "dave")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-transform")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            initial_payload = json.dumps({
+                "feed": buddy_feed_manager.get_feed(user_id=uid, limit=20),
+                "stats": buddy_feed_manager.get_summary_stats(user_id=uid)
+            })
+            try:
+                self.wfile.write(f"event: buddy_feed\ndata: {initial_payload}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                # Send periodic heartbeat
+                for _ in range(2):
+                    time.sleep(1.0)
+                    heartbeat = json.dumps({"type": "ping", "timestamp": time.time()})
+                    self.wfile.write(f"event: heartbeat\ndata: {heartbeat}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, Exception):
+                pass
+            return
+
         # 1. API: Trending / Featured Tracks
         elif path == "/api/trending":
             self.send_json_response(FEATURED_TRACKS)
@@ -2155,9 +2368,12 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         elif path == "/api/search":
             q = params.get("q", [""])[0]
             limit_raw = params.get("limit", ["16"])[0]
+            structured = params.get("structured", ["0"])[0].lower() in ("1", "true") or params.get("format", [""])[0] == "spotify"
             try:
                 validator = SearchQueryValidator(q=q, limit=int(limit_raw))
-                results = search_tracks(validator.q, limit=validator.limit or 16)
+                user = getattr(self, "current_user", None)
+                user_id = user.get("sub") if user else None
+                results = search_tracks(validator.q, limit=validator.limit or 16, structured=structured, user_id=user_id)
                 self.send_json_response(results)
             except ValidationError as ve:
                 self.send_json_error(400, f"Search validation error: {ve.errors()[0]['msg']}")
@@ -2210,6 +2426,52 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Recommendation generation error for '{title}': {e}")
                 self.send_json_error(500, "Failed to generate track recommendations.")
+            return
+
+        # 3c. API: Flagship Spotify-Modeled Daily Mixes (Sub-Taste Clustering)
+        elif path == "/api/recommendations/daily-mixes":
+            user_id = params.get("user_id", [None])[0] or (getattr(self, 'current_user', {}) or {}).get("sub", "dave")
+            try:
+                mixes = recommendation_engine.get_daily_mixes(user_id=user_id)
+                self.send_json_response({
+                    "status": "success",
+                    "user_id": user_id,
+                    "count": len(mixes),
+                    "mixes": mixes
+                })
+            except Exception as e:
+                logger.error(f"Failed to generate daily mixes: {e}")
+                self.send_json_error(500, "Failed to generate daily mixes.")
+            return
+
+        # 3d. API: Discover Weekly (High-Novelty Candidates via BaRT Contextual Bandit)
+        elif path == "/api/recommendations/discover-weekly":
+            user_id = params.get("user_id", [None])[0] or (getattr(self, 'current_user', {}) or {}).get("sub", "dave")
+            try:
+                discover_data = recommendation_engine.get_discover_weekly(user_id=user_id)
+                self.send_json_response({
+                    "status": "success",
+                    "user_id": user_id,
+                    "discover_weekly": discover_data
+                })
+            except Exception as e:
+                logger.error(f"Failed to generate discover weekly: {e}")
+                self.send_json_error(500, "Failed to generate discover weekly.")
+            return
+
+        # 3e. API: Context & BaRT Bandit State
+        elif path == "/api/recommendations/context":
+            user_id = params.get("user_id", [None])[0] or (getattr(self, 'current_user', {}) or {}).get("sub", "dave")
+            try:
+                ctx_state = recommendation_engine.get_context_state(user_id=user_id)
+                self.send_json_response({
+                    "status": "success",
+                    "user_id": user_id,
+                    "context": ctx_state
+                })
+            except Exception as e:
+                logger.error(f"Failed to get recommendation context: {e}")
+                self.send_json_error(500, "Failed to get recommendation context.")
             return
 
         # 4. API: LRCLIB Synchronized Lyrics

@@ -64,6 +64,14 @@ except ImportError:
     except ImportError:
         recommendation_engine = None
 
+try:
+    from buddy_feed import buddy_feed_manager
+except ImportError:
+    try:
+        from spot_extractor.buddy_feed import buddy_feed_manager
+    except ImportError:
+        buddy_feed_manager = None
+
 
 # Initialize FastMCP Server
 mcp = FastMCP("spot-extractor-engine")
@@ -700,6 +708,124 @@ def get_similar_tracks(title: str, artist: str = "", limit: int = 5) -> str:
     for i, t in enumerate(tracks, 1):
         lines.append(f"{i}. {t['title']} - {t['artist']} ({t.get('source', 'generic')})")
     return "\n".join(lines)
+
+
+@mcp.tool()
+def get_daily_mixes(user_id: str = "dave") -> str:
+    """
+    Spotify-Modeled Daily Mixes (Sub-Taste Clustering):
+    Returns 6 distinct Daily Mixes clustering user listening history into cohesive genre/acoustic sets.
+    """
+    if not recommendation_engine:
+        return "Recommendation engine not initialized."
+    mixes = recommendation_engine.get_daily_mixes(user_id=user_id)
+    lines = [f"SongBuddy Daily Mixes for '{user_id}':"]
+    for m in mixes:
+        track_names = ", ".join([f"{t['title']} ({t['artist']})" for t in m['tracks'][:3]])
+        lines.append(f"• {m['title']}: {m['tag']} — {m['subtitle']}\n   Tracks: {track_names}")
+    return "\n\n".join(lines)
+
+
+@mcp.tool()
+def get_discover_weekly(user_id: str = "dave") -> str:
+    """
+    Spotify-Modeled Discover Weekly:
+    Retrieves high-novelty exploration tracks using BaRT contextual multi-armed bandit.
+    """
+    if not recommendation_engine:
+        return "Recommendation engine not initialized."
+    dw = recommendation_engine.get_discover_weekly(user_id=user_id)
+    lines = [
+        f"Discover Weekly ({dw.get('refresh_day', 'Monday')}):",
+        f"Subtitle: {dw.get('subtitle', '')}",
+        "Discovery Candidates:"
+    ]
+    for i, t in enumerate(dw.get("tracks", []), 1):
+        lines.append(f"{i}. {t['title']} - {t['artist']} [Novelty: {t.get('novelty_score', 0.8)}] (ID: {t['id']})")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def record_recommendation_feedback(
+    track_id: str,
+    action: str = "stream",
+    listen_seconds: int = 45,
+    user_id: str = "dave"
+) -> str:
+    """
+    Updates Spotify BaRT Contextual Multi-Armed Bandit weights based on implicit user feedback:
+    - 'stream' (>30s): positive reinforcement (+1.0 reward)
+    - 'favorite': high positive reward (+2.0 reward)
+    - 'skip' (<30s): negative penalty (-1.0), triggers churn safety guard if repeated
+    """
+    if not recommendation_engine:
+        return "Recommendation engine not initialized."
+    res = recommendation_engine.record_feedback(user_id, track_id, action, listen_seconds)
+    return json.dumps(res, indent=2)
+
+
+@mcp.tool()
+def get_buddy_activity_feed(user_id: str = "dave", limit: int = 10) -> str:
+    """
+    Retrieves the real-time Friend Activity / Buddy Feed modeled after Spotify's buddy-feed.spa.
+    Shows what friends are actively streaming, their current tracks, artists, and live soundwave states.
+    """
+    if not buddy_feed_manager:
+        return "Buddy feed manager not initialized."
+    feed = buddy_feed_manager.get_feed(user_id=user_id, limit=limit)
+    if not feed:
+        return "No active friend listening activities right now."
+    
+    summary = buddy_feed_manager.get_summary_stats(user_id=user_id)
+    lines = [f"SongBuddy Friend Activity ({summary['active_listening_count']} active listeners):"]
+    for i, item in enumerate(feed, 1):
+        status = "🎵 LISTENING NOW" if item["equalizer_active"] else f"⏸️ {item['time_ago_str']}"
+        lines.append(
+            f"{i}. {item['display_name']} ({status})\n"
+            f"   Song: {item['title']} - {item['artist']} [Album: {item['album']}]\n"
+            f"   Track ID: {item['track_id']} | Sync: /api/social/sync?friend_id={item['user_id']}"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def broadcast_listening_activity(
+    track_id: str,
+    title: str,
+    artist: str,
+    album: str = "Single",
+    is_playing: bool = True,
+    user_id: str = "dave",
+    display_name: str = "Dave Cooper"
+) -> str:
+    """
+    Broadcasts the current user's playback status to the Buddy Feed so friends can see it in real-time.
+    """
+    if not buddy_feed_manager:
+        return "Buddy feed manager not initialized."
+    result = buddy_feed_manager.update_user_activity(
+        user_id=user_id,
+        display_name=display_name,
+        avatar="",
+        track_data={"id": track_id, "title": title, "artist": artist, "album": album},
+        is_playing=is_playing
+    )
+    if not result:
+        return "Broadcasting skipped (Private Session active or invalid track ID)."
+    return f"Successfully broadcasted '{title}' by '{artist}' for {display_name}."
+
+
+@mcp.tool()
+def sync_listen_along(friend_id: str) -> str:
+    """
+    Resolves a friend's active track for 1-click 'Listen Along' synchronized playback.
+    """
+    if not buddy_feed_manager:
+        return "Buddy feed manager not initialized."
+    sync_data = buddy_feed_manager.get_listen_along(friend_id)
+    if not sync_data:
+        return f"Friend '{friend_id}' is not currently active or not found."
+    return json.dumps(sync_data, indent=2)
 
 
 if __name__ == "__main__":

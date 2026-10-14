@@ -40,7 +40,8 @@ The repository also includes the companion **spot-extractor** CLI and Model Cont
 - **Modern Glassmorphism UI**: High-fidelity dark/light theme, emerald accents, animated equalizer indicators, responsive queue drawer, and quick play grids.
 - **Zero-Build Vanilla Frontend**: Built with pure HTML5, modern CSS, and modular JavaScript—served directly by the Python server without requiring Node.js, npm, or bundler build steps.
 - **Native OS MediaSession Integration**: Bridges playback state, cover art, and transport controls to OS media overlays, lock screen controls, and keyboard media keys.
-- **Spot-Extractor & MCP Server**: Exposes `inspect_spotify_url` and `download_spotify_track` tools to AI agents (Cursor, Claude Desktop, Antigravity).
+- **Spotify-Engineered Buddy Feed (`buddy-feed.spa` & Dealer Push)**: Real-time friend activity sidebar featuring live listening statuses, animated soundwave equalizers, 1-click 'Listen Along' synchronized playback, and private listening session toggles.
+- **Spot-Extractor & MCP Server**: Exposes `inspect_spotify_url`, `download_spotify_track`, and `get_buddy_activity_feed` tools to AI agents (Cursor, Claude Desktop, Antigravity).
 
 ---
 
@@ -193,6 +194,12 @@ Add this entry to your client configuration file (e.g. `claude_desktop_config.js
 
 - `inspect_spotify_url(spotify_url: str)`: Returns canonical title, artists, album, duration, ISRC, and cover artwork without downloading.
 - `download_spotify_track(spotify_url: str, custom_output_dir: str)`: Resolves stream, converts to MP3, and embeds ID3 tags and album art into the output directory.
+- `get_daily_mixes(user_id: str)`: Generates 6 distinct Daily Mixes clustering listening history into cohesive genre/acoustic sets.
+- `get_discover_weekly(user_id: str)`: Retrieves high-novelty exploration candidates using BaRT contextual multi-armed bandit.
+- `record_recommendation_feedback(...)`: Updates BaRT bandit weights from implicit user signals (streams, rapid skips, favorites).
+- `get_buddy_activity_feed(user_id: str)`: Real-time query of friends' active streams, animated status, and listening history.
+- `broadcast_listening_activity(...)`: Broadcasts user playback state across the social listening graph.
+- `sync_listen_along(friend_id: str)`: Resolves friend's track for 1-click synchronized playback.
 
 ---
 
@@ -206,7 +213,16 @@ Add this entry to your client configuration file (e.g. `claude_desktop_config.js
 | `/api/search?q=<query>` | `GET` | Fast flat-extracted search results with sanitization. | Configurable |
 | `/api/stream?id=<videoId>` | `GET` | Direct in-memory byte-range streaming proxy (HTTP 206). | Configurable |
 | `/api/radio?id=<videoId>` | `GET` | 25–50 YouTube Music Automix recommendations. | Configurable |
+| `/api/recommendations/daily-mixes` | `GET` | 6 distinct sub-taste clustered Daily Mixes. | No |
+| `/api/recommendations/discover-weekly` | `GET` | Flagship Discover Weekly playlist with novelty scoring. | No |
+| `/api/recommendations/feedback` | `POST` | Records implicit feedback (streams >30s, rapid skips <30s, favorites). | No |
+| `/api/recommendations/context` | `GET` | Real-time BaRT bandit context and session momentum. | No |
 | `/api/lyrics?track=...` | `GET` | Synchronized `.lrc` and plain text lyrics from LRCLIB. | Configurable |
+| `/api/social/buddy-feed` | `GET` | Real-time Friend Activity listening feed & statistics. | Configurable |
+| `/api/social/buddy-feed/stream` | `GET` | Dealer SSE stream for real-time social activity push. | Configurable |
+| `/api/social/sync?friend_id=...` | `GET` | Resolves friend track details for 1-click 'Listen Along'. | Configurable |
+| `/api/social/activity` | `POST` | Broadcasts user's current playback status to friends. | Configurable |
+| `/api/social/privacy` | `POST` | Toggles Private Session (hides listening activity). | Configurable |
 | `/api/auth/register` | `POST` | User registration with Argon2 password hashing. | No |
 | `/api/auth/login` | `POST` | User authentication returning signed JWT token. | No |
 | `/api/auth/logout` | `POST` | Revokes active JWT token session. | Yes (Bearer) |

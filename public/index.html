@@ -19,7 +19,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=75">
+  <link rel="stylesheet" href="styles.css?v=78">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -144,6 +144,16 @@
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
               </svg>
               <span class="nav-label">Party Jukebox</span>
+            </li>
+            <li class="nav-item" data-view="buddy-feed" id="nav-buddy-feed">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              <span class="nav-label">Friend Activity</span>
+              <span class="buddy-nav-badge" id="buddy-nav-badge">3</span>
             </li>
           </ul>
         </div>
@@ -356,6 +366,16 @@
 
         <!-- Right User Actions + Studio Hi-Fi Badge -->
         <div class="top-user-actions">
+          <button class="songbuddy-studio-badge chip-buddy-feed" id="btn-top-buddy-feed" title="Friend Activity / Buddy Feed (Press 'B' or tap here)" aria-label="Toggle Friend Activity Feed" aria-keyshortcuts="B">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>Friend Activity</span>
+            <span class="buddy-badge-pulse" id="buddy-top-count">3</span>
+          </button>
           <button class="songbuddy-studio-badge chip-jukebox" id="btn-top-jukebox" title="Party Jukebox &amp; Guest Voting Mode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -709,14 +729,46 @@
           </div>
         </div>
 
-        <!-- Section: Curated Studio Stations (For You) -->
+        <!-- Section: Curated Studio Stations & Daily Mixes (Spotify BaRT Pipeline) -->
         <div class="songbuddy-curated-section">
           <div class="songbuddy-section-header">
             <div class="section-title-wrap">
-              <span class="section-eyebrow">PERSONALIZED FLOW</span>
-              <h2 class="section-headline" id="made-for-user-heading">Curated Stations For You</h2>
+              <div class="bart-header-eyebrow-row">
+                <span class="section-eyebrow">SPOTIFY RECOMMENDATION ENGINE</span>
+                <span class="bart-momentum-indicator" id="bart-momentum-badge" title="BaRT Contextual Multi-Armed Bandit Status">
+                  <span class="bart-status-dot"></span>
+                  <span id="bart-status-text">BaRT Bandit: Exploratory (~10% Novelty)</span>
+                </span>
+              </div>
+              <h2 class="section-headline" id="made-for-user-heading">Made For You &bull; Daily Mixes</h2>
             </div>
-            <button class="section-action-link" id="btn-show-all-made-for">Explore All Stations &rarr;</button>
+            <button class="section-action-link" id="btn-show-all-made-for">Explore All Mixes &rarr;</button>
+          </div>
+
+          <!-- Featured Discover Weekly Hero Card -->
+          <div class="discover-weekly-banner" id="discover-weekly-banner">
+            <div class="dw-banner-accent-glow"></div>
+            <div class="dw-banner-content">
+              <div class="dw-tag-badge">DISCOVER WEEKLY &bull; MONDAY REFRESH</div>
+              <h3 class="dw-banner-title">Your Weekly Novelty Mixtape</h3>
+              <p class="dw-banner-desc">Curated via high-novelty exploration candidates across your listening graph, Annoy approximate nearest neighbors, and BaRT contextual multi-armed bandits.</p>
+              <div class="dw-banner-meta">
+                <span class="dw-meta-pill" id="dw-meta-tracks">6 Fresh Discoveries</span>
+                <span class="dw-meta-pill dw-meta-highlight" id="dw-meta-novelty">Avg. Novelty: 84%</span>
+                <span class="dw-meta-pill" id="dw-meta-day">Refreshes Mondays</span>
+              </div>
+              <div class="dw-banner-actions">
+                <button class="dw-btn-play" id="btn-play-discover-weekly" title="Play Discover Weekly">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                    <polygon points="7 4 20 12 7 20 7 4"></polygon>
+                  </svg>
+                  <span>Play Discover Weekly</span>
+                </button>
+              </div>
+            </div>
+            <div class="dw-banner-preview" id="dw-preview-tracks">
+              <!-- Mini track chips populated dynamically via JS -->
+            </div>
           </div>
 
           <div class="songbuddy-cards-grid" id="spotify-made-for-grid">
@@ -1820,6 +1872,74 @@
   </div>
 
   <!-- ====================================================================
+       BUDDY FEED DRAWER / FRIEND ACTIVITY (SPOTIFY buddy-feed.spa TEARDOWN)
+       ==================================================================== -->
+  <div id="buddy-feed-drawer-overlay" class="buddy-feed-overlay hidden" aria-modal="true" role="dialog" aria-label="Friend Activity">
+    <div class="buddy-feed-backdrop" id="buddy-feed-backdrop"></div>
+    <div class="buddy-feed-card">
+      <div class="buddy-feed-header">
+        <div class="buddy-header-left">
+          <div class="buddy-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="20" height="20">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </div>
+          <div class="buddy-header-titles">
+            <h3 class="buddy-drawer-title">Friend Activity</h3>
+            <span class="buddy-pill-status" id="buddy-header-status">
+              <span class="buddy-live-beacon"></span>
+              <span id="buddy-active-listeners-text">3 listening now</span>
+            </span>
+          </div>
+        </div>
+        <div class="buddy-header-actions">
+          <button type="button" class="btn-buddy-tool" id="btn-buddy-refresh" title="Refresh Live Feed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+          <button type="button" class="btn-buddy-tool" id="btn-buddy-privacy" title="Toggle Private Session (Hide your activity)">
+            <svg id="buddy-privacy-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span id="buddy-privacy-label">Public</span>
+          </button>
+          <button type="button" class="btn-buddy-tool" id="btn-buddy-add-friend" title="Add / Follow Friend">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="8.5" cy="7" r="4"></circle>
+              <line x1="20" y1="8" x2="20" y2="14"></line>
+              <line x1="23" y1="11" x2="17" y2="11"></line>
+            </svg>
+          </button>
+          <button type="button" class="btn-close-buddy" id="btn-close-buddy-feed" title="Close Friend Activity (Esc or B)">
+            &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- Add Friend Inline Bar (Collapsible) -->
+      <div class="buddy-add-bar hidden" id="buddy-add-bar">
+        <input type="text" id="input-add-friend" class="buddy-add-input" placeholder="Enter friend username or name...">
+        <button type="button" class="btn-add-friend-submit" id="btn-submit-add-friend">Follow</button>
+      </div>
+
+      <!-- Buddy Feed Body -->
+      <div class="buddy-feed-body" id="buddy-feed-body">
+        <div class="buddy-activity-list" id="buddy-activity-list">
+          <!-- Dynamically populated via JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
        AUTHENTICATION & LOGIN OVERLAY (GROOVVY STUDIO ACCESS)
        ==================================================================== -->
   <div id="auth-overlay" class="auth-overlay hidden" aria-modal="true" role="dialog">
@@ -2831,6 +2951,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=75"></script>
+  <script src="app.js?v=78"></script>
 </body>
 </html>
