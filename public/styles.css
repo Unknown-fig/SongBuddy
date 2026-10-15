@@ -1556,9 +1556,9 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 .hero-btn-primary,
 .spotify-pill-cta {
-  background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
-  color: #ffffff;
-  font-weight: 700;
+  background: #ffffff;
+  color: #000000 !important;
+  font-weight: 800;
   font-size: 13.5px;
   padding: 10px 22px;
   border-radius: 9999px;
@@ -1567,14 +1567,28 @@ body.tv-mode-active .screen-ambilight-wrapper {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.35);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-btn-primary svg,
+.spotify-pill-cta svg {
+  color: #000000 !important;
+  fill: #000000 !important;
+  stroke: #000000 !important;
+}
+
+.hero-btn-primary span,
+.spotify-pill-cta span {
+  color: #000000 !important;
+  font-weight: 800 !important;
 }
 
 .hero-btn-primary:hover,
 .spotify-pill-cta:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 26px rgba(255, 255, 255, 0.55);
+  background: #f4f4f5;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.5);
 }
 
 .hero-btn-secondary,
@@ -1964,8 +1978,8 @@ body.tv-mode-active .screen-ambilight-wrapper {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
-  color: #ffffff;
+  background: #ffffff;
+  color: #000000 !important;
   border: none;
   display: flex;
   align-items: center;
@@ -1981,6 +1995,9 @@ body.tv-mode-active .screen-ambilight-wrapper {
 .card-btn-play svg,
 .spotify-floating-play-btn svg {
   margin-left: 2px;
+  fill: #000000 !important;
+  stroke: #000000 !important;
+  color: #000000 !important;
 }
 
 .songbuddy-card:hover .card-btn-play,
@@ -5156,13 +5173,28 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 [data-theme="neumorphic"] .spotify-pill-cta {
   background: var(--neu-accent, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
   box-shadow: 3px 3px 8px rgba(255, 255, 255, 0.4), -2px -2px 6px #ffffff;
+}
+
+[data-theme="neumorphic"] .spotify-pill-cta svg,
+[data-theme="neumorphic"] .spotify-pill-cta span {
+  color: #000000 !important;
+  fill: #000000 !important;
+  stroke: #000000 !important;
 }
 
 [data-theme="neumorphic"] .spotify-pill-cta:hover {
   background: var(--neu-accent-hover, #27272a);
+  color: #ffffff !important;
   box-shadow: 4px 4px 12px rgba(255, 255, 255, 0.5), -3px -3px 8px #ffffff;
+}
+
+[data-theme="neumorphic"] .spotify-pill-cta:hover svg,
+[data-theme="neumorphic"] .spotify-pill-cta:hover span {
+  color: #ffffff !important;
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 [data-theme="neumorphic"] .spotify-link-cta {
@@ -5184,7 +5216,7 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 [data-theme="neumorphic"] .getting-started-disc:hover {
   background: var(--neu-accent, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
 }
 
 /* Album & Curated Stations Frosted Slabs */
@@ -5224,12 +5256,25 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 [data-theme="neumorphic"] .spotify-floating-play-btn {
   background: var(--neu-accent, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
   box-shadow: 3px 3px 10px rgba(255, 255, 255, 0.5), -2px -2px 6px #ffffff;
+}
+
+[data-theme="neumorphic"] .spotify-floating-play-btn svg {
+  fill: #000000 !important;
+  stroke: #000000 !important;
+  color: #000000 !important;
 }
 
 [data-theme="neumorphic"] .spotify-floating-play-btn:hover {
   background: var(--neu-accent-hover, #27272a);
+  color: #ffffff !important;
+}
+
+[data-theme="neumorphic"] .spotify-floating-play-btn:hover svg {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+  color: #ffffff !important;
 }
 
 /* Top Navigation Bar Elements */
@@ -6171,9 +6216,9 @@ body.tv-mode-active .screen-ambilight-wrapper {
   padding: 0 5px;
   border-radius: 9px;
   background: linear-gradient(135deg, #ffffff, #e4e4e7);
-  color: #ffffff;
+  color: #000000 !important;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8033,7 +8078,7 @@ body.tv-mode-active .screen-ambilight-wrapper {
   height: 58px;
   border-radius: 50%;
   background: var(--ambient-beam, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
   border: none;
   display: flex;
   align-items: center;
@@ -8041,6 +8086,12 @@ body.tv-mode-active .screen-ambilight-wrapper {
   cursor: pointer;
   box-shadow: 0 0 24px var(--ambient-glow, rgba(235, 30, 50, 0.75));
   transition: all 0.2s ease;
+}
+
+.cinema-ctrl-play svg {
+  fill: #000000 !important;
+  stroke: #000000 !important;
+  color: #000000 !important;
 }
 
 .cinema-ctrl-play:hover {
@@ -8120,12 +8171,17 @@ body.tv-mode-active .screen-ambilight-wrapper {
   height: 32px;
   border-radius: 8px;
   background: var(--accent-gradient, linear-gradient(135deg, #ffffff, #e4e4e7));
-  color: #ffffff;
+  color: #000000 !important;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(255, 255, 255, 0.4);
+}
+
+.pwa-install-icon svg {
+  stroke: #000000 !important;
+  color: #000000 !important;
 }
 
 .pwa-install-text {
@@ -8253,8 +8309,8 @@ body.tv-mode-active .screen-ambilight-wrapper {
   padding: 7px 16px;
   border-radius: var(--r-full, 9999px);
   font-size: 0.8rem;
-  font-weight: 700;
-  color: #ffffff;
+  font-weight: 800;
+  color: #000000 !important;
   background: var(--accent-gradient, linear-gradient(135deg, #ffffff, #e4e4e7));
   border: none;
   cursor: pointer;
@@ -8534,7 +8590,8 @@ body.tv-mode-active .screen-ambilight-wrapper {
 .eq-preset-pill.active {
   background: var(--accent-primary, #ffffff);
   border-color: var(--accent-primary, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
+  font-weight: 700;
   box-shadow: 0 4px 12px var(--accent-glow, rgba(255, 255, 255, 0.4));
 }
 
@@ -8859,7 +8916,7 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 .speed-option.active {
   background: var(--accent-primary, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
   font-weight: 700;
 }
 
@@ -8936,7 +8993,8 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 [data-theme="neumorphic"] .eq-preset-pill.active {
   background: var(--neu-accent, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
+  font-weight: 700;
   box-shadow: 3px 3px 8px rgba(255, 255, 255, 0.45), -2px -2px 6px #ffffff;
 }
 
@@ -9009,7 +9067,8 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 [data-theme="neumorphic"] .speed-option.active {
   background: var(--neu-accent, #ffffff);
-  color: #ffffff;
+  color: #000000 !important;
+  font-weight: 700;
 }
 
 /* ==========================================================================
@@ -9164,11 +9223,11 @@ body.tv-mode-active .screen-ambilight-wrapper {
 .btn-browse-local {
   padding: 8px 20px;
   background: linear-gradient(135deg, #ffffff 0%, #e4e4e7 100%);
-  color: #ffffff;
+  color: #000000 !important;
   border: none;
   border-radius: 9999px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(255, 255, 255, 0.35);
   transition: all 0.2s ease;
@@ -9811,8 +9870,8 @@ body.tv-mode-active .screen-ambilight-wrapper {
   background: #ffffff;
   border: none;
   border-radius: 8px;
-  color: #ffffff;
-  font-weight: 700;
+  color: #000000 !important;
+  font-weight: 800;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -9908,7 +9967,7 @@ body.tv-mode-active .screen-ambilight-wrapper {
 
 .btn-custom-pl-play:hover {
   background: #ffffff;
-  color: #ffffff;
+  color: #000000 !important;
 }
 
 .btn-custom-pl-del {
