@@ -51,7 +51,7 @@ from social_jukebox import (
     generate_qr_svg
 )
 from recommender import recommendation_engine
-from search_engine import search_engine
+from search_engine import search_engine, classify_media_type
 from buddy_feed import buddy_feed_manager
 
 # Track server start time
@@ -786,6 +786,7 @@ def _raw_fetch_youtube_candidates(query: str, limit: int = 25) -> List[Dict[str,
                 raw_artist = entry.get("artist") or entry.get("creator") or entry.get("channel") or entry.get("uploader") or "Unknown Artist"
                 raw_desc = entry.get("description", "") or ""
                 cleaned_title, cleaned_artist = clean_track_title(raw_title, raw_artist, query=query, description=raw_desc)
+                media_info = classify_media_type(raw_title, raw_artist, raw_desc)
 
                 album = entry.get("album")
                 if not album:
@@ -799,7 +800,12 @@ def _raw_fetch_youtube_candidates(query: str, limit: int = 25) -> List[Dict[str,
                     "album": album or "Single",
                     "duration": duration,
                     "duration_formatted": format_duration(duration),
-                    "thumbnail": thumb
+                    "thumbnail": thumb,
+                    "media_type": media_info["media_type"],
+                    "badge": media_info["badge"],
+                    "is_video": media_info["is_video"],
+                    "is_official_audio": media_info["is_official_audio"],
+                    "is_live": media_info["is_live"]
                 })
 
         return tracks

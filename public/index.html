@@ -19,7 +19,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=80">
+  <link rel="stylesheet" href="styles.css?v=85">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -999,7 +999,9 @@
             </button>
           </div>
           <div class="search-filter-pills">
-            <button class="filter-pill active" data-filter="all">All Tracks</button>
+            <button class="filter-pill active" data-filter="all">All</button>
+            <button class="filter-pill" data-filter="songs">🎵 Songs</button>
+            <button class="filter-pill" data-filter="videos">🎬 Videos</button>
             <button class="filter-pill" data-filter="artists">Artists</button>
             <button class="filter-pill" data-filter="albums">Albums</button>
           </div>
@@ -1259,8 +1261,17 @@
 
       <!-- Track Information -->
       <div class="neu-track-meta">
-        <h4 class="neu-track-title" id="player-track-name">Treat You Better</h4>
-        <p class="neu-track-artist" id="player-track-artist">Shawn Mendes</p>
+        <div class="neu-meta-header-row">
+          <h4 class="neu-track-title" id="player-track-name">Treat You Better</h4>
+          <span class="player-media-badge tag-song hidden" id="player-media-badge">🎵 Song</span>
+        </div>
+        <div class="neu-meta-sub-row">
+          <p class="neu-track-artist" id="player-track-artist">Shawn Mendes</p>
+          <button type="button" class="btn-song-video-toggle hidden" id="btn-song-video-toggle" title="Switch between Audio and Video version">
+            <span class="toggle-icon">🎬</span>
+            <span class="toggle-text">Video</span>
+          </button>
+        </div>
       </div>
 
       <!-- Sunken Inset Scrubber Pill -->
@@ -3048,6 +3059,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=80"></script>
+  <script src="app.js?v=85"></script>
 </body>
 </html>

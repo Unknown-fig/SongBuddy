@@ -925,12 +925,20 @@ function createTrackRow(track, rankNumber) {
   const duration = track.duration_formatted || '3:30';
   const rank = String(rankNumber).padStart(2, '0');
 
+  const isVideo = track.media_type === 'video' || track.is_video;
+  const badgeLabel = track.badge || (isVideo ? 'Video' : 'Song');
+  const mediaClass = isVideo ? 'tag-video' : 'tag-song';
+  const mediaIcon = track.badge === 'Live' ? '🎤' : (isVideo ? '🎬' : '🎵');
+
   row.innerHTML = `
     <span class="chart-rank">${rank}</span>
     <img src="${thumb}" alt="${escapeHTML(track.title)}" class="chart-thumb" loading="lazy" onerror="if(this.src.includes('hq720.jpg')){this.src=this.src.replace('hq720.jpg','hqdefault.jpg');}else{this.onerror=null;this.src=generateFallbackCover('${escapeHTML(track.title)}','${escapeHTML(track.artist)}');}">
     <div class="chart-info">
-      ${track.is_lyrics_match ? `<span class="lyrics-match-pill" title="${escapeHTML(track.matched_lyric || 'Matches lyrics')}">Lyrics match</span>` : ''}
-      <span class="chart-title">${escapeHTML(track.title)}</span>
+      <div class="chart-title-line">
+        <span class="track-media-tag ${mediaClass}" title="${escapeHTML(badgeLabel)}">${mediaIcon} ${escapeHTML(badgeLabel)}</span>
+        ${track.is_lyrics_match ? `<span class="lyrics-match-pill" title="${escapeHTML(track.matched_lyric || 'Matches lyrics')}">Lyrics match</span>` : ''}
+        <span class="chart-title">${escapeHTML(track.title)}</span>
+      </div>
       <span class="chart-artist">${escapeHTML(track.artist)}</span>
     </div>
     <span class="chart-time">${duration}</span>
@@ -2070,6 +2078,33 @@ function updatePlayerUI(track) {
   if ($('player-track-artist')) $('player-track-artist').textContent = track.artist || 'Unknown Artist';
   if ($('player-track-album')) $('player-track-album').textContent = `${track.album || 'SongBuddy Stream'} • Direct Opus`;
 
+  // Update Media Badge (Song vs Video / Live)
+  const isVideo = track.media_type === 'video' || track.is_video;
+  const badgeLabel = track.badge || (isVideo ? 'Video' : 'Song');
+  const mediaBadgeEl = $('player-media-badge');
+  if (mediaBadgeEl) {
+    mediaBadgeEl.classList.remove('hidden', 'tag-song', 'tag-video');
+    mediaBadgeEl.classList.add(isVideo ? 'tag-video' : 'tag-song');
+    mediaBadgeEl.textContent = `${isVideo ? '🎬' : '🎵'} ${badgeLabel}`;
+  }
+
+  // Update Song ⇄ Video Mode Switcher Button
+  const toggleBtn = $('btn-song-video-toggle');
+  if (toggleBtn) {
+    toggleBtn.classList.remove('hidden');
+    const toggleIcon = toggleBtn.querySelector('.toggle-icon');
+    const toggleText = toggleBtn.querySelector('.toggle-text');
+    if (isVideo) {
+      if (toggleIcon) toggleIcon.textContent = '🎵';
+      if (toggleText) toggleText.textContent = 'Song';
+      toggleBtn.title = 'Switch to official studio song audio';
+    } else {
+      if (toggleIcon) toggleIcon.textContent = '🎬';
+      if (toggleText) toggleText.textContent = 'Video';
+      toggleBtn.title = 'Switch to official music video';
+    }
+  }
+
   setSafeCoverArt($('player-cover-art'), track);
 
   // Sync Now Playing card in queue drawer
@@ -2110,6 +2145,58 @@ function updatePlayerUI(track) {
   // Sync Cinema Ambilight Mode & Dynamic Thumbnail Roaming Beam
   syncCinemaTrack(track);
   updateAmbientThumbnailColors(track);
+}
+
+async function toggleSongVideoMode() {
+  if (!state.currentTrack) return;
+  const current = state.currentTrack;
+  const isCurrentlyVideo = current.media_type === 'video' || current.is_video;
+  const targetType = isCurrentlyVideo ? 'Song' : 'Music Video';
+
+  if (typeof showToastNotification === 'function') {
+    showToastNotification(`Searching for ${targetType} version...`);
+  }
+
+  // 1. Check if counterpart is in current search data
+  if (state.lastSearchData) {
+    const pool = isCurrentlyVideo ? state.lastSearchData.songs : state.lastSearchData.videos;
+    if (Array.isArray(pool) && pool.length > 0) {
+      const match = pool.find(t => t.id !== current.id);
+      if (match) {
+        playTrack(match);
+        if (typeof showToastNotification === 'function') {
+          showToastNotification(`Playing ${targetType}: ${match.title}`);
+        }
+        return;
+      }
+    }
+  }
+
+  // 2. Query precision search for the counterpart
+  try {
+    const q = isCurrentlyVideo
+      ? `${current.title} ${current.artist} official audio topic`
+      : `${current.title} ${current.artist} official music video`;
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=5&structured=true`);
+    if (res.ok) {
+      const data = await res.json();
+      const list = isCurrentlyVideo ? (data.songs || data.tracks || []) : (data.videos || data.tracks || []);
+      const match = list.find(t => t.id !== current.id) || list[0];
+      if (match) {
+        playTrack(match);
+        if (typeof showToastNotification === 'function') {
+          showToastNotification(`Playing ${targetType}: ${match.title}`);
+        }
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn('[SongBuddy] Failed to switch song/video mode:', err);
+  }
+
+  if (typeof showToastNotification === 'function') {
+    showToastNotification(`No alternative ${targetType.toLowerCase()} found.`);
+  }
 }
 
 function updatePlayPauseIcons(isPlaying) {
@@ -3085,12 +3172,14 @@ function handleSearch(query, immediate = false) {
   if (cachedData) {
     if (Array.isArray(cachedData) && cachedData.length > 0) {
       state.lastSearchResults = cachedData;
+      state.lastSearchData = { tracks: cachedData, songs: cachedData.filter(t => !t.is_video), videos: cachedData.filter(t => t.is_video) };
       renderSearchResults(cachedData);
       if (loading) loading.classList.add('hidden');
       if (immediate) return;
     } else if (cachedData.tracks && cachedData.tracks.length > 0) {
       state.lastSearchResults = cachedData.tracks;
-      renderSearchResults(cachedData.tracks, cachedData.topResult, cachedData.artists, cachedData.albums);
+      state.lastSearchData = cachedData;
+      renderSearchResults(cachedData.tracks, cachedData.topResult, cachedData.artists, cachedData.albums, cachedData.songs, cachedData.videos);
       if (loading) loading.classList.add('hidden');
       if (immediate) return;
     }
@@ -3120,10 +3209,13 @@ function handleSearch(query, immediate = false) {
       const topResult = isStructured ? data.top_result : null;
       const artists = isStructured ? data.artists : [];
       const albums = isStructured ? data.albums : [];
+      const songs = isStructured ? (data.songs || tracks.filter(t => !t.is_video)) : tracks.filter(t => !t.is_video);
+      const videos = isStructured ? (data.videos || tracks.filter(t => t.is_video)) : tracks.filter(t => t.is_video);
 
       state.lastSearchResults = tracks;
-      setSearchInLRU(cleanQuery, { tracks, topResult, artists, albums });
-      renderSearchResults(tracks, topResult, artists, albums);
+      state.lastSearchData = { tracks, topResult, artists, albums, songs, videos };
+      setSearchInLRU(cleanQuery, { tracks, topResult, artists, albums, songs, videos });
+      renderSearchResults(tracks, topResult, artists, albums, songs, videos);
     } catch (err) {
       if (err.name === 'AbortError') return;
       if (loading) loading.classList.add('hidden');
@@ -3288,7 +3380,7 @@ function renderSearchDiscoveryState() {
   }
 }
 
-function renderSearchResults(tracks, topResultOverride = null, artistsList = [], albumsList = []) {
+function renderSearchResults(tracks, topResultOverride = null, artistsList = [], albumsList = [], songsList = [], videosList = []) {
   const container = $('search-results-list');
   if (!container) return;
   container.innerHTML = '';
@@ -3303,7 +3395,11 @@ function renderSearchResults(tracks, topResultOverride = null, artistsList = [],
   const filter = state.activeSearchFilter || 'all';
   const currentQuery = $('search-input')?.value?.toLowerCase()?.trim() || '';
 
-  if (filter === 'artists' && currentQuery) {
+  if (filter === 'songs') {
+    list = list.filter(t => t.media_type === 'song' || !t.is_video);
+  } else if (filter === 'videos') {
+    list = list.filter(t => t.media_type === 'video' || t.is_video);
+  } else if (filter === 'artists' && currentQuery) {
     const artistMatches = list.filter(t => (t.artist || '').toLowerCase().includes(currentQuery));
     if (artistMatches.length > 0) {
       list = artistMatches;
@@ -3316,7 +3412,8 @@ function renderSearchResults(tracks, topResultOverride = null, artistsList = [],
   }
 
   if (!list.length) {
-    container.innerHTML = `<p style="color:var(--text-muted); padding:20px;">No matching tracks found.</p>`;
+    const filterMsg = filter === 'songs' ? 'No studio songs found.' : (filter === 'videos' ? 'No music videos found.' : 'No matching tracks found.');
+    container.innerHTML = `<p style="color:var(--text-muted); padding:20px;">${filterMsg}</p>`;
     return;
   }
 
@@ -3329,15 +3426,15 @@ function renderSearchResults(tracks, topResultOverride = null, artistsList = [],
   }
 
   // ============================================================================
-  // SPOTIFY-GRADE SECTIONED LAYOUT: Top Result Card + Songs List + Artists + Albums
+  // SPOTIFY-GRADE SECTIONED LAYOUT: Top Result Card + Songs List + Artists + Albums + Videos
   // ============================================================================
   const topResult = topResultOverride || {
     type: list[0].entity_type === 'artist' ? 'artist' : 'track',
     title: list[0].title,
     artist: list[0].artist,
     thumbnail: list[0].thumbnail,
-    badge: list[0].entity_type === 'artist' ? 'Artist' : 'Song',
-    subtitle: `${list[0].entity_type === 'artist' ? 'Artist' : 'Song • ' + list[0].artist}`,
+    badge: list[0].entity_type === 'artist' ? 'Artist' : (list[0].badge || (list[0].is_video ? 'Music Video' : 'Song')),
+    subtitle: `${list[0].entity_type === 'artist' ? 'Artist' : (list[0].badge || (list[0].is_video ? 'Music Video' : 'Song')) + ' • ' + list[0].artist}`,
     track: list[0]
   };
 
@@ -3345,8 +3442,12 @@ function renderSearchResults(tracks, topResultOverride = null, artistsList = [],
   const badgeText = topResult.badge || (isArtist ? 'Artist' : 'Song');
   const topThumb = topResult.thumbnail || generateFallbackCover(topResult.title, topResult.artist);
 
-  const songsSlice = (topResultOverride && topResult.type === 'artist') ? list.slice(0, 4) : list.slice(1, 5);
-  const remainingSlice = (topResultOverride && topResult.type === 'artist') ? list.slice(4) : list.slice(5);
+  // Dedicated segregation of songs and videos
+  const allSongs = (songsList && songsList.length > 0) ? songsList : list.filter(t => t.media_type === 'song' || !t.is_video);
+  const allVideos = (videosList && videosList.length > 0) ? videosList : list.filter(t => t.media_type === 'video' || t.is_video);
+
+  const songsSlice = (topResultOverride && topResult.type === 'artist') ? allSongs.slice(0, 4) : allSongs.slice(1, 5);
+  const remainingSongs = (topResultOverride && topResult.type === 'artist') ? allSongs.slice(4) : allSongs.slice(5);
 
   const gridWrapper = document.createElement('div');
   gridWrapper.className = 'spotify-search-top-row';
@@ -3392,13 +3493,17 @@ function renderSearchResults(tracks, topResultOverride = null, artistsList = [],
   songsCol.className = 'spotify-search-col';
   songsCol.innerHTML = `<h3 class="spotify-search-section-header">Songs</h3>`;
 
-  const songsList = document.createElement('div');
-  songsList.className = 'spotify-songs-list';
-  songsSlice.forEach((track, idx) => {
-    const row = createTrackRow(track, (topResultOverride && topResult.type === 'artist') ? idx + 1 : idx + 2);
-    songsList.appendChild(row);
-  });
-  songsCol.appendChild(songsList);
+  const songsContainer = document.createElement('div');
+  songsContainer.className = 'spotify-songs-list';
+  if (songsSlice.length > 0) {
+    songsSlice.forEach((track, idx) => {
+      const row = createTrackRow(track, (topResultOverride && topResult.type === 'artist') ? idx + 1 : idx + 2);
+      songsContainer.appendChild(row);
+    });
+  } else {
+    songsContainer.innerHTML = `<p style="color:var(--text-muted); font-size:0.88rem; padding:12px 0;">No audio recordings found.</p>`;
+  }
+  songsCol.appendChild(songsContainer);
   gridWrapper.appendChild(songsCol);
 
   container.appendChild(gridWrapper);
@@ -3451,13 +3556,62 @@ function renderSearchResults(tracks, topResultOverride = null, artistsList = [],
     container.appendChild(albumsSection);
   }
 
-  // 5. Remaining Songs
-  if (remainingSlice.length > 0) {
+  // 5. Dedicated Music Videos Section (Segregated 16:9 Cinema View)
+  if (Array.isArray(allVideos) && allVideos.length > 0) {
+    const videosSection = document.createElement('div');
+    videosSection.style.marginTop = '28px';
+    videosSection.innerHTML = `<h3 class="spotify-search-section-header">🎬 Music Videos & Live Performances</h3>`;
+    const videosGrid = document.createElement('div');
+    videosGrid.className = 'spotify-videos-grid';
+
+    allVideos.slice(0, 6).forEach(vid => {
+      const vidCard = document.createElement('div');
+      vidCard.className = 'spotify-video-card';
+      const vidThumb = vid.thumbnail || generateFallbackCover(vid.title, vid.artist);
+      const vidDuration = vid.duration_formatted || '3:45';
+      const vidBadge = vid.badge || 'Video';
+
+      vidCard.innerHTML = `
+        <div class="spotify-video-thumb-wrap">
+          <img src="${vidThumb}" class="spotify-video-thumb" alt="${escapeHTML(vid.title)}" loading="lazy" onerror="if(this.src.includes('hq720.jpg')){this.src=this.src.replace('hq720.jpg','hqdefault.jpg');}else{this.onerror=null;this.src=generateFallbackCover('${escapeHTML(vid.title)}','${escapeHTML(vid.artist)}');}">
+          <div class="spotify-video-play-overlay">
+            <div class="spotify-video-play-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <polygon points="6 4 20 12 6 20 6 4"></polygon>
+              </svg>
+            </div>
+          </div>
+          <span class="spotify-video-duration">${vidDuration}</span>
+        </div>
+        <div class="spotify-video-info">
+          <div class="spotify-video-title-row">
+            <span class="spotify-video-badge">${escapeHTML(vidBadge)}</span>
+            <div class="spotify-video-title" title="${escapeHTML(vid.title)}">${escapeHTML(vid.title)}</div>
+          </div>
+          <div class="spotify-video-meta">${escapeHTML(vid.artist)}</div>
+        </div>
+      `;
+
+      vidCard.addEventListener('click', () => {
+        playTrack(vid);
+        if (typeof showToastNotification === 'function') {
+          showToastNotification(`Playing video: ${vid.title}`);
+        }
+      });
+      videosGrid.appendChild(vidCard);
+    });
+
+    videosSection.appendChild(videosGrid);
+    container.appendChild(videosSection);
+  }
+
+  // 6. Remaining Studio Songs
+  if (remainingSongs.length > 0) {
     const moreSection = document.createElement('div');
     moreSection.style.marginTop = '28px';
     moreSection.innerHTML = `<h3 class="spotify-search-section-header">More Songs</h3>`;
     const moreList = document.createElement('div');
-    remainingSlice.forEach((track, idx) => {
+    remainingSongs.forEach((track, idx) => {
       const row = createTrackRow(track, (topResultOverride && topResult.type === 'artist') ? idx + 5 : idx + 6);
       moreList.appendChild(row);
     });
@@ -7155,16 +7309,31 @@ function setupEventListeners() {
     }
   });
 
-  // Search Category Filter Pills (All Tracks, Artists, Albums)
+  // Search Category Filter Pills (All, Songs, Videos, Artists, Albums)
   document.querySelectorAll('.filter-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       state.activeSearchFilter = pill.dataset.filter || 'all';
-      if (state.lastSearchResults && state.lastSearchResults.length > 0) {
+      if (state.lastSearchData) {
+        renderSearchResults(
+          state.lastSearchData.tracks,
+          state.lastSearchData.topResult,
+          state.lastSearchData.artists,
+          state.lastSearchData.albums,
+          state.lastSearchData.songs,
+          state.lastSearchData.videos
+        );
+      } else if (state.lastSearchResults && state.lastSearchResults.length > 0) {
         renderSearchResults(state.lastSearchResults);
       }
     });
+  });
+
+  // Song ⇄ Video Mode Switcher Button
+  $('btn-song-video-toggle')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSongVideoMode();
   });
 
   // Global Keyboard Shortcuts

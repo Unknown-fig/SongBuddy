@@ -100,6 +100,91 @@ def clean_track_title(raw_title: str, default_artist: str = "Unknown Artist") ->
     return (first_segment or raw, clean_artist)
 
 
+def classify_media_type(raw_title: str, channel: str = "", description: str = "") -> Dict[str, Any]:
+    """
+    Intelligently classifies media into:
+    - Normal Studio Song (Audio Release / Studio Master / Album Track)
+    - Video (Official Music Video / Live Concert / Visualizer)
+    """
+    t_lower = (raw_title or "").lower().strip()
+    ch_lower = (channel or "").lower().strip()
+    desc_lower = (description or "").lower().strip()
+
+    # 1. YouTube Topic channels (- Topic) are 100% official studio album releases
+    if "- topic" in ch_lower or ch_lower.endswith(" topic"):
+        return {
+            "media_type": "song",
+            "badge": "Song",
+            "is_video": False,
+            "is_official_audio": True,
+            "is_live": False
+        }
+
+    # 2. Explicit Official Audio / Album track keywords
+    audio_keywords = (
+        "official audio", "audio only", "provided to youtube",
+        "original mix", "studio version", "album version", "remastered audio",
+        "official lyric video", "lyric video"
+    )
+    if any(k in t_lower or k in desc_lower for k in audio_keywords):
+        return {
+            "media_type": "song",
+            "badge": "Song",
+            "is_video": False,
+            "is_official_audio": True,
+            "is_live": False
+        }
+
+    # 3. Live performance / Concert recordings
+    live_keywords = (
+        "live at", "live in", "live performance", "live session", "in concert",
+        "live acoustic", "festival live", "live from", "live 20", "(live)", "[live]",
+        "live tour", "live concert"
+    )
+    if any(k in t_lower for k in live_keywords):
+        return {
+            "media_type": "video",
+            "badge": "Live",
+            "is_video": True,
+            "is_official_audio": False,
+            "is_live": True
+        }
+
+    # 4. Visualizers
+    if "visualizer" in t_lower or "visualiser" in t_lower:
+        return {
+            "media_type": "video",
+            "badge": "Visualizer",
+            "is_video": True,
+            "is_official_audio": False,
+            "is_live": False
+        }
+
+    # 5. Official Music Videos
+    video_keywords = (
+        "official music video", "official video", "music video",
+        "[mv]", "(mv)", "full video", "video song", "official mv",
+        "music video 4k", "music video hd"
+    )
+    if any(k in t_lower for k in video_keywords) or "vevo" in ch_lower:
+        return {
+            "media_type": "video",
+            "badge": "Music Video",
+            "is_video": True,
+            "is_official_audio": False,
+            "is_live": False
+        }
+
+    # 6. Default to Song for standard music streams
+    return {
+        "media_type": "song",
+        "badge": "Song",
+        "is_video": False,
+        "is_official_audio": False,
+        "is_live": False
+    }
+
+
 CURATED_ARTISTS = [
     {
         "name": "The Weeknd",
@@ -495,6 +580,9 @@ class SpotifySearchEngine:
         scored_candidates = []
         for c in valid_candidates:
             s = self.calculate_relevance_score(c, q_clean, user_affinity_artists, user_history_ids)
+            # Give natural +12 boost to clean studio audio recordings over live/cinematic videos
+            if c.get("is_official_audio"):
+                s += 12.0
             scored_candidates.append((s, c))
 
         scored_candidates.sort(key=lambda x: x[0], reverse=True)
@@ -516,14 +604,18 @@ class SpotifySearchEngine:
             }
         elif ranked_tracks:
             best_track = ranked_tracks[0]
+            is_vid = best_track.get("media_type") == "video" or best_track.get("is_video")
+            badge_label = best_track.get("badge") or ("Music Video" if is_vid else "Song")
             top_result = {
                 "type": "track",
                 "id": best_track.get("id"),
                 "title": best_track.get("title"),
                 "artist": best_track.get("artist", "Unknown Artist"),
                 "thumbnail": best_track.get("thumbnail"),
-                "badge": "Song",
-                "subtitle": f"Song • {best_track.get('artist', 'Artist')}",
+                "badge": badge_label,
+                "media_type": "video" if is_vid else "song",
+                "is_video": bool(is_vid),
+                "subtitle": f"{badge_label} • {best_track.get('artist', 'Artist')}",
                 "track": best_track
             }
 
@@ -567,6 +659,10 @@ class SpotifySearchEngine:
                 if len(extracted_albums) >= 4:
                     break
 
+        # 7. Dedicated Song vs Video Segregation
+        songs_list = [t for t in ranked_tracks if t.get("media_type") == "song" or not t.get("is_video")]
+        videos_list = [t for t in ranked_tracks if t.get("media_type") == "video" or t.get("is_video")]
+
         duration_ms = int((time.time() - start_time) * 1000)
 
         if not structured:
@@ -575,13 +671,17 @@ class SpotifySearchEngine:
         return {
             "top_result": top_result,
             "tracks": ranked_tracks,
+            "songs": songs_list,
+            "videos": videos_list,
             "artists": extracted_artists,
             "albums": extracted_albums,
             "query": q_clean,
             "metrics": {
                 "latency_ms": duration_ms,
                 "candidate_count": len(valid_candidates),
-                "has_curated_artist": bool(curated_artist)
+                "has_curated_artist": bool(curated_artist),
+                "songs_count": len(songs_list),
+                "videos_count": len(videos_list)
             }
         }
 

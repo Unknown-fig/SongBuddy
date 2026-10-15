@@ -7,6 +7,7 @@ from search_engine import (
     EdgeNGramIndex,
     levenshtein_distance,
     clean_track_title,
+    classify_media_type,
     CURATED_ARTISTS
 )
 
@@ -106,3 +107,47 @@ def test_ltr_relevance_scoring_with_user_affinity():
     # Score with user affinity and history should be significantly higher
     assert score_affinity > score_normal
     assert score_affinity - score_normal >= 60.0
+
+
+def test_classify_media_type():
+    # 1. Topic channel -> Song
+    res_topic = classify_media_type("Blinding Lights", "The Weeknd - Topic", "")
+    assert res_topic["media_type"] == "song"
+    assert res_topic["badge"] == "Song"
+    assert res_topic["is_video"] is False
+    assert res_topic["is_official_audio"] is True
+
+    # 2. Official audio keyword -> Song
+    res_audio = classify_media_type("Shape of You (Official Audio)", "Ed Sheeran", "")
+    assert res_audio["media_type"] == "song"
+    assert res_audio["badge"] == "Song"
+    assert res_audio["is_video"] is False
+
+    # 3. Official Music Video / VEVO -> Video
+    res_mv = classify_media_type("Starboy (Official Music Video) ft. Daft Punk", "TheWeekndVEVO", "")
+    assert res_mv["media_type"] == "video"
+    assert res_mv["badge"] == "Music Video"
+    assert res_mv["is_video"] is True
+
+    # 4. Live Concert -> Live
+    res_live = classify_media_type("Viva La Vida (Live in Sao Paulo)", "Coldplay", "")
+    assert res_live["media_type"] == "video"
+    assert res_live["badge"] == "Live"
+    assert res_live["is_live"] is True
+
+    # 5. Visualizer -> Visualizer
+    res_vis = classify_media_type("After Hours (Official Visualizer)", "The Weeknd", "")
+    assert res_vis["media_type"] == "video"
+    assert res_vis["badge"] == "Visualizer"
+    assert res_vis["is_video"] is True
+
+
+def test_search_songs_videos_segregation():
+    res = search_engine.search("The Weeknd", structured=True)
+    assert "songs" in res
+    assert "videos" in res
+    assert isinstance(res["songs"], list)
+    assert isinstance(res["videos"], list)
+    assert "metrics" in res
+    assert "songs_count" in res["metrics"]
+    assert "videos_count" in res["metrics"]
