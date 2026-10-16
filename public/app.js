@@ -10193,9 +10193,83 @@ function renderDailyMixesGrid(mixes) {
   });
 }
 
+async function loadDaylistStation(user = 'guest') {
+  try {
+    const res = await fetch(`/api/recommendations/daylist?user_id=${encodeURIComponent(user)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.daylist) return;
+    const daylist = data.daylist;
+    state.currentDaylist = daylist;
+
+    const headlineEl = $('daylist-headline');
+    const updateTimeEl = $('daylist-update-time');
+    const subtextEl = $('daylist-subtext');
+    const timeLabelEl = $('daylist-art-time-label');
+    const artGradEl = $('daylist-art-gradient');
+    const ambGlowEl = $('daylist-ambient-glow');
+
+    if (headlineEl) headlineEl.textContent = daylist.title;
+    if (updateTimeEl) updateTimeEl.textContent = daylist.next_update;
+    if (subtextEl) subtextEl.textContent = daylist.description;
+    if (timeLabelEl) timeLabelEl.textContent = (daylist.daypart || 'Vibe').toUpperCase();
+
+    if (daylist.palette && daylist.palette.length >= 3) {
+      const [c1, c2, c3] = daylist.palette;
+      if (artGradEl) {
+        artGradEl.style.background = `linear-gradient(135deg, ${c1} 0%, ${c2} 50%, ${c3} 100%)`;
+      }
+      if (ambGlowEl) {
+        ambGlowEl.style.background = `radial-gradient(circle at 75% 30%, ${c1}40 0%, ${c2}25 35%, transparent 70%)`;
+      }
+    }
+
+    // Bind Play Daylist Button
+    const playBtn = $('btn-daylist-play');
+    if (playBtn && !playBtn._hasBound) {
+      playBtn._hasBound = true;
+      playBtn.addEventListener('click', () => {
+        if (state.currentDaylist?.tracks && state.currentDaylist.tracks.length > 0) {
+          state.playbackSource = {
+            type: 'daylist',
+            id: state.currentDaylist.id,
+            name: state.currentDaylist.title,
+            excludeFromTaste: false
+          };
+          updatePlayerTasteExclusionBadge();
+          state.queue = [...state.currentDaylist.tracks];
+          saveQueueToStorage();
+          renderQueueDrawer();
+          playTrack(state.currentDaylist.tracks[0]);
+          showToastNotification(`Playing Daylist: "${state.currentDaylist.title}"`);
+        }
+      });
+    }
+
+    // Bind View Tracklist Button
+    const queueBtn = $('btn-daylist-queue');
+    if (queueBtn && !queueBtn._hasBound) {
+      queueBtn._hasBound = true;
+      queueBtn.addEventListener('click', () => {
+        if (state.currentDaylist?.tracks && state.currentDaylist.tracks.length > 0) {
+          state.queue = [...state.currentDaylist.tracks];
+          saveQueueToStorage();
+          renderQueueDrawer();
+          openQueueDrawer();
+          showToastNotification(`Loaded "${state.currentDaylist.title}" into queue`);
+        }
+      });
+    }
+  } catch (e) {
+    console.debug('[Daylist Load Error]', e);
+  }
+}
+
 async function initSpotifyRecommendationsUI() {
   const user = state.currentUser?.username || 'dave';
   try {
+    loadDaylistStation(user);
+
     const [mixResp, dwResp, ctxResp] = await Promise.all([
       fetch(`/api/recommendations/daily-mixes?user_id=${encodeURIComponent(user)}`).then(r => r.json()).catch(() => null),
       fetch(`/api/recommendations/discover-weekly?user_id=${encodeURIComponent(user)}`).then(r => r.json()).catch(() => null),

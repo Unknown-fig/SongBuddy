@@ -2239,6 +2239,7 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             "/api/jukebox/room", "/api/jukebox/queue", "/api/jukebox/vote", "/api/jukebox/next", "/api/jukebox/qr",
             "/api/share/mint", "/api/share/resolve", "/api/recommendations",
             "/api/recommendations/daily-mixes", "/api/recommendations/discover-weekly",
+            "/api/recommendations/daylist",
             "/api/recommendations/feedback", "/api/recommendations/context",
             "/api/user/playlists", "/api/user/favorites", "/api/user/history",
             "/api/user/smart-playlists", "/api/import/playlist",
@@ -2552,7 +2553,25 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 self.send_json_error(500, "Failed to generate discover weekly.")
             return
 
-        # 3e. API: Context & BaRT Bandit State
+        # 3e. API: Flagship Spotify-Modeled Dynamic Daylist (Dayparting Station)
+        elif path == "/api/recommendations/daylist":
+            user_id = params.get("user_id", [None])[0] or (getattr(self, 'current_user', {}) or {}).get("sub", "guest")
+            hour_param = params.get("hour", [None])[0]
+            day_param = params.get("day", [None])[0]
+            try:
+                hour_val = int(hour_param) if hour_param is not None and hour_param.isdigit() else None
+                daylist_data = recommendation_engine.get_daylist(user_id=user_id, hour=hour_val, day_name=day_param)
+                self.send_json_response({
+                    "status": "success",
+                    "user_id": user_id,
+                    "daylist": daylist_data
+                })
+            except Exception as e:
+                logger.error(f"Failed to generate daylist: {e}")
+                self.send_json_error(500, "Failed to generate daylist.")
+            return
+
+        # 3f. API: Context & BaRT Bandit State
         elif path == "/api/recommendations/context":
             user_id = params.get("user_id", [None])[0] or (getattr(self, 'current_user', {}) or {}).get("sub", "dave")
             try:

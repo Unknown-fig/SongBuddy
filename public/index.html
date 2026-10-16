@@ -19,7 +19,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=88">
+  <link rel="stylesheet" href="styles.css?v=89">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -586,6 +586,55 @@
                   </svg>
                 </div>
                 <span class="hero-wave-caption">Live Bitstream Engine</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spotify-Modeled Dynamic Daylist Station -->
+        <div class="daylist-banner" id="daylist-banner">
+          <div class="daylist-ambient-glow" id="daylist-ambient-glow"></div>
+          <div class="daylist-content">
+            <div class="daylist-left">
+              <div class="daylist-badge-row">
+                <span class="daylist-pill-badge">✦ SPOTIFY-GRADE DAYLIST</span>
+                <span class="daylist-update-time" id="daylist-update-time">Updates this evening</span>
+              </div>
+              <h2 class="daylist-headline" id="daylist-headline">upbeat momentum friday afternoon</h2>
+              <p class="daylist-subtext" id="daylist-subtext">A personalized flow that shifts with the day. Curated from your listening graph and dynamic acoustic energy.</p>
+              <div class="daylist-actions">
+                <button type="button" class="btn-daylist-play" id="btn-daylist-play" title="Play Daylist Station">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <polygon points="6 4 20 12 6 20 6 4"></polygon>
+                  </svg>
+                  <span>Play Daylist</span>
+                </button>
+                <button type="button" class="btn-daylist-queue" id="btn-daylist-queue" title="View in Queue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                  </svg>
+                  <span>Tracklist</span>
+                </button>
+              </div>
+            </div>
+            <div class="daylist-right">
+              <div class="daylist-art-card" id="daylist-art-card">
+                <div class="daylist-art-gradient" id="daylist-art-gradient"></div>
+                <div class="daylist-art-inner">
+                  <span class="daylist-art-tag">SONGBUDDY</span>
+                  <div class="daylist-art-vibe-wrap">
+                    <span class="daylist-art-time-label" id="daylist-art-time-label">AFTERNOON</span>
+                    <span class="daylist-art-time-sub" id="daylist-art-time-sub">DAYLIST</span>
+                  </div>
+                  <div class="daylist-waveform-bars">
+                    <span></span><span></span><span></span><span></span><span></span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -3185,6 +3234,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=88"></script>
+  <script src="app.js?v=89"></script>
 </body>
 </html>

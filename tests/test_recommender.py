@@ -255,7 +255,18 @@ def test_http_recommendation_endpoints(client):
     assert dw_data["discover_weekly"]["refresh_day"] == "Monday"
     assert len(dw_data["discover_weekly"]["tracks"]) >= 5
 
-    # 3. GET /api/recommendations/context
+    # 3. GET /api/recommendations/daylist
+    client.request("GET", "/api/recommendations/daylist?user_id=dave&hour=14&day=Friday")
+    resp_dl = client.getresponse()
+    assert resp_dl.status == 200
+    dl_data = json.loads(resp_dl.read().decode("utf-8"))
+    assert dl_data["status"] == "success"
+    assert "daylist" in dl_data
+    assert dl_data["daylist"]["daypart"] == "afternoon"
+    assert "friday" in dl_data["daylist"]["title"].lower()
+    assert len(dl_data["daylist"]["tracks"]) >= 4
+
+    # 4. GET /api/recommendations/context
     client.request("GET", "/api/recommendations/context?user_id=dave")
     resp_ctx = client.getresponse()
     assert resp_ctx.status == 200
@@ -264,7 +275,7 @@ def test_http_recommendation_endpoints(client):
     assert "context" in ctx_data
     assert "exploration_rate" in ctx_data["context"]
 
-    # 4. POST /api/recommendations/feedback
+    # 5. POST /api/recommendations/feedback
     fb_payload = {
         "user_id": "dave",
         "track_id": "4NRXx6U8ABQ",
@@ -277,5 +288,27 @@ def test_http_recommendation_endpoints(client):
     fb_res = json.loads(resp_fb.read().decode("utf-8"))
     assert fb_res["status"] == "success"
     assert fb_res["feedback"]["reward_delta"] == 1.0
+
+
+def test_get_daylist_and_dayparting():
+    from recommender import recommendation_engine
+
+    # Test Early Morning
+    dl_early = recommendation_engine.get_daylist(user_id="test_user", hour=6, day_name="Sunday")
+    assert dl_early["daypart"] == "early morning"
+    assert "sunday" in dl_early["title"].lower()
+    assert len(dl_early["palette"]) == 3
+    assert len(dl_early["tracks"]) >= 4
+
+    # Test Afternoon
+    dl_afternoon = recommendation_engine.get_daylist(user_id="test_user", hour=15, day_name="Friday")
+    assert dl_afternoon["daypart"] == "afternoon"
+    assert "upbeat momentum" in dl_afternoon["title"]
+
+    # Test Late Night
+    dl_night = recommendation_engine.get_daylist(user_id="test_user", hour=1, day_name="Wednesday")
+    assert dl_night["daypart"] == "late night"
+    assert "lo-fi midnight thoughts" in dl_night["title"]
+
 
 

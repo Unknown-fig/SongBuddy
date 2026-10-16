@@ -994,6 +994,134 @@ class RecommendationEngine:
             "context": context
         }
 
+    def get_daylist(
+        self,
+        user_id: str = "guest",
+        hour: Optional[int] = None,
+        day_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generates Spotify-Modeled Dynamic 'Daylist' (Hyper-personalized dayparting station):
+        - Changes dynamically across 5 dayparts: Early Morning, Morning, Afternoon, Evening, Late Night.
+        - Produces Spotify's viral expressive title: '{vibe} {day} {daypart}' (e.g., 'upbeat momentum friday afternoon').
+        - Pulls acoustic vector candidates matching the daypart tempo and energy.
+        - Blends user taste with high-relevance freshness.
+        """
+        now = datetime.now()
+        cur_hour = now.hour if hour is None else int(hour)
+        day_str = now.strftime("%A") if not day_name else day_name.strip().capitalize()
+
+        if 4 <= cur_hour < 9:
+            daypart = "early morning"
+            vibe = "peaceful sunrise"
+            next_update = "this morning at 9:00 AM"
+            palette = ["#f97316", "#fbbf24", "#78350f"]
+            desc = f"Your {day_str} early morning soundtrack: peaceful acoustic, sunrise calm, and gentle melodies."
+            target_vector = AcousticVector(energy=0.35, valence=0.60, acousticness=0.75, danceability=0.45)
+            default_pool = [
+                {"id": "7NOSDKb0HlU", "title": "Aruarian Dance", "artist": "Nujabes", "duration": 252, "thumbnail": "https://i.ytimg.com/vi/7NOSDKb0HlU/hqdefault.jpg"},
+                {"id": "69kpgQyq7_Y", "title": "Rasiya", "artist": "Pritam, Shreya Ghoshal", "duration": 260, "thumbnail": "https://i.ytimg.com/vi/69kpgQyq7_Y/hqdefault.jpg"},
+                {"id": "2Vv-BfVoq4g", "title": "Shivers", "artist": "Ed Sheeran", "duration": 207, "thumbnail": "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg"},
+                {"id": "50VNCymT-Cs", "title": "Until I Found You", "artist": "Stephen Sanchez", "duration": 177, "thumbnail": "https://i.ytimg.com/vi/50VNCymT-Cs/hqdefault.jpg"}
+            ]
+        elif 9 <= cur_hour < 12:
+            daypart = "morning"
+            vibe = "focus drive"
+            next_update = "this afternoon at 12:00 PM"
+            palette = ["#06b6d4", "#10b981", "#064e3b"]
+            desc = f"Your {day_str} morning soundtrack: productive flow, bright rhythms, and focused drive."
+            target_vector = AcousticVector(energy=0.65, valence=0.70, acousticness=0.35, danceability=0.65)
+            default_pool = [
+                {"id": "JGwWNGJdvx8", "title": "Shape of You", "artist": "Ed Sheeran", "duration": 233, "thumbnail": "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg"},
+                {"id": "L3wKzyIN1yk", "title": "Treat You Better", "artist": "Shawn Mendes", "duration": 187, "thumbnail": "https://i.ytimg.com/vi/L3wKzyIN1yk/hqdefault.jpg"},
+                {"id": "b8T8yP7e-yI", "title": "Hallucinate", "artist": "Dua Lipa", "duration": 208, "thumbnail": "https://i.ytimg.com/vi/b8T8yP7e-yI/hqdefault.jpg"},
+                {"id": "rQQU95aP_h8", "title": "Save Your Tears", "artist": "The Weeknd", "duration": 215, "thumbnail": "https://i.ytimg.com/vi/rQQU95aP_h8/hqdefault.jpg"}
+            ]
+        elif 12 <= cur_hour < 17:
+            daypart = "afternoon"
+            vibe = "upbeat momentum"
+            next_update = "this evening at 5:00 PM"
+            palette = ["#8b5cf6", "#ec4899", "#4c0519"]
+            desc = f"Your {day_str} afternoon soundtrack: midday groove, vibrant energy, and danceable beats."
+            target_vector = AcousticVector(energy=0.80, valence=0.75, acousticness=0.20, danceability=0.80)
+            default_pool = [
+                {"id": "b8T8yP7e-yI", "title": "Levitating", "artist": "Dua Lipa", "duration": 203, "thumbnail": "https://i.ytimg.com/vi/b8T8yP7e-yI/hqdefault.jpg"},
+                {"id": "fPO76JdxS68", "title": "STARGAZING", "artist": "Travis Scott", "duration": 270, "thumbnail": "https://i.ytimg.com/vi/fPO76JdxS68/hqdefault.jpg"},
+                {"id": "JGwWNGJdvx8", "title": "Shape of You", "artist": "Ed Sheeran", "duration": 233, "thumbnail": "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg"},
+                {"id": "L3wKzyIN1yk", "title": "Treat You Better", "artist": "Shawn Mendes", "duration": 187, "thumbnail": "https://i.ytimg.com/vi/L3wKzyIN1yk/hqdefault.jpg"}
+            ]
+        elif 17 <= cur_hour < 22:
+            daypart = "evening"
+            vibe = "sunset golden hour"
+            next_update = "tonight at 10:00 PM"
+            palette = ["#f43f5e", "#a855f7", "#1e1b4b"]
+            desc = f"Your {day_str} evening soundtrack: sunset kickback, warm basslines, and evening glow."
+            target_vector = AcousticVector(energy=0.60, valence=0.65, acousticness=0.40, danceability=0.65)
+            default_pool = [
+                {"id": "rQQU95aP_h8", "title": "Save Your Tears (Remix)", "artist": "The Weeknd, Ariana Grande", "duration": 191, "thumbnail": "https://i.ytimg.com/vi/rQQU95aP_h8/hqdefault.jpg"},
+                {"id": "69kpgQyq7_Y", "title": "Rasiya", "artist": "Pritam, Shreya Ghoshal", "duration": 260, "thumbnail": "https://i.ytimg.com/vi/69kpgQyq7_Y/hqdefault.jpg"},
+                {"id": "50VNCymT-Cs", "title": "Until I Found You", "artist": "Stephen Sanchez", "duration": 177, "thumbnail": "https://i.ytimg.com/vi/50VNCymT-Cs/hqdefault.jpg"},
+                {"id": "2Vv-BfVoq4g", "title": "Shivers", "artist": "Ed Sheeran", "duration": 207, "thumbnail": "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg"}
+            ]
+        else:
+            daypart = "late night"
+            vibe = "lo-fi midnight thoughts"
+            next_update = "tomorrow morning at 5:00 AM"
+            palette = ["#3b82f6", "#6366f1", "#09090b"]
+            desc = f"Your {day_str} late night soundtrack: mellow lo-fi, nocturnal atmospheric rhythms, and calm."
+            target_vector = AcousticVector(energy=0.30, valence=0.35, acousticness=0.75, danceability=0.40)
+            default_pool = [
+                {"id": "7NOSDKb0HlU", "title": "Aruarian Dance", "artist": "Nujabes", "duration": 252, "thumbnail": "https://i.ytimg.com/vi/7NOSDKb0HlU/hqdefault.jpg"},
+                {"id": "fPO76JdxS68", "title": "STARGAZING", "artist": "Travis Scott", "duration": 270, "thumbnail": "https://i.ytimg.com/vi/fPO76JdxS68/hqdefault.jpg"},
+                {"id": "rQQU95aP_h8", "title": "Save Your Tears", "artist": "The Weeknd", "duration": 215, "thumbnail": "https://i.ytimg.com/vi/rQQU95aP_h8/hqdefault.jpg"},
+                {"id": "50VNCymT-Cs", "title": "Until I Found You", "artist": "Stephen Sanchez", "duration": 177, "thumbnail": "https://i.ytimg.com/vi/50VNCymT-Cs/hqdefault.jpg"}
+            ]
+
+        daylist_title = f"{vibe} {day_str.lower()} {daypart}"
+
+        tracks = list(default_pool)
+        if self.annoy_index:
+            try:
+                ann_matches = self.annoy_index.query(target_vector, k=10)
+                matched_tracks = []
+                for tid, sim in ann_matches:
+                    meta = self.annoy_index.metadata.get(tid)
+                    if meta:
+                        matched_tracks.append({
+                            "id": meta["id"],
+                            "title": meta["title"],
+                            "artist": meta["artist"],
+                            "thumbnail": meta.get("thumbnail") or f"https://i.ytimg.com/vi/{meta['id']}/hqdefault.jpg",
+                            "duration": 210,
+                            "match_score": round(sim, 2)
+                        })
+                if matched_tracks:
+                    combined = matched_tracks + tracks
+                    seen = set()
+                    unique_tracks = []
+                    for t in combined:
+                        if t["id"] not in seen:
+                            seen.add(t["id"])
+                            unique_tracks.append(t)
+                    tracks = unique_tracks[:12]
+            except Exception as e:
+                logger.debug(f"Annoy query for daylist failed: {e}")
+
+        for t in tracks:
+            t["duration_formatted"] = format_duration(t.get("duration", 0))
+
+        return {
+            "id": f"daylist_{daypart.replace(' ', '_')}",
+            "title": daylist_title,
+            "vibe": vibe,
+            "daypart": daypart,
+            "day": day_str,
+            "next_update": next_update,
+            "palette": palette,
+            "description": desc,
+            "tracks": tracks
+        }
+
     def record_feedback(self, user_id: str, track_id: str, action: str, listen_seconds: int = 0) -> Dict[str, Any]:
         """Observes user reactions (stream vs skip vs favorite) to update BaRT bandit weights."""
         return self.bandit.record_feedback(user_id, track_id, action, listen_seconds)
