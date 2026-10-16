@@ -2122,6 +2122,17 @@ function updatePlayerUI(track) {
     mediaBadgeEl.textContent = `${isVideo ? '🎬' : '🎵'} ${badgeLabel}`;
   }
 
+  // Update Taste Exclusion Pill
+  const tasteBadgeEl = $('player-taste-excluded-badge');
+  if (tasteBadgeEl) {
+    const isExcluded = Boolean(state.playbackSource?.excludeFromTaste || track.exclude_from_taste);
+    if (isExcluded) {
+      tasteBadgeEl.classList.remove('hidden');
+    } else {
+      tasteBadgeEl.classList.add('hidden');
+    }
+  }
+
   // Update Song ⇄ Video Mode Switcher Button
   const toggleBtn = $('btn-song-video-toggle');
   if (toggleBtn) {
@@ -4683,28 +4694,53 @@ function renderCustomPlaylistsShelf() {
     card.className = 'playlist-card-custom';
     const thumb = pl.cover_url || (pl.tracks && pl.tracks[0]?.thumbnail) || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80';
     const count = pl.track_count !== undefined ? pl.track_count : (pl.tracks ? pl.tracks.length : 0);
+    const isExcluded = Boolean(pl.exclude_from_taste);
 
     card.innerHTML = `
       <img src="${thumb}" alt="${escapeHTML(pl.name)}" class="custom-pl-thumb" onerror="this.src='https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80';">
+      ${isExcluded ? '<span class="badge-taste-excluded" title="Excluded from your taste profile">🚫 Excluded from Taste</span>' : ''}
       <span class="custom-pl-title">${escapeHTML(pl.name)}</span>
       <span class="custom-pl-sub">${count} tracks • ${escapeHTML(pl.description || 'Personal Mix')}</span>
       <div class="custom-pl-actions">
         <button type="button" class="btn-custom-pl-play" title="Play Playlist">Play</button>
+        <button type="button" class="btn-custom-pl-taste ${isExcluded ? 'active' : ''}" title="${isExcluded ? 'Taste exclusion active. Click to include in taste profile.' : 'Exclude from your taste profile.'}">
+          ${isExcluded ? '🚫 Excluded' : 'Taste'}
+        </button>
         <button type="button" class="btn-custom-pl-del" title="Delete Playlist">&times;</button>
       </div>
     `;
 
-    card.querySelector('.btn-custom-pl-play')?.addEventListener('click', (e) => {
-      e.stopPropagation();
+    const startPlaylistPlayback = () => {
       if (pl.tracks && pl.tracks.length > 0) {
+        state.playbackSource = {
+          type: 'playlist',
+          id: pl.id,
+          name: pl.name,
+          excludeFromTaste: Boolean(pl.exclude_from_taste)
+        };
+        updatePlayerTasteExclusionBadge();
         state.queue = [...pl.tracks];
         saveQueueToStorage();
         renderQueueDrawer();
         playTrack(pl.tracks[0]);
-        showToastNotification(`Playing playlist "${pl.name}"`);
+        if (pl.exclude_from_taste) {
+          showToastNotification(`Playing "${pl.name}" (Excluded from Taste Profile)`);
+        } else {
+          showToastNotification(`Playing playlist "${pl.name}"`);
+        }
       } else {
         showToastNotification('Playlist is empty.');
       }
+    };
+
+    card.querySelector('.btn-custom-pl-play')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startPlaylistPlayback();
+    });
+
+    card.querySelector('.btn-custom-pl-taste')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePlaylistTasteExclusion(pl.id, !isExcluded);
     });
 
     card.querySelector('.btn-custom-pl-del')?.addEventListener('click', (e) => {
@@ -4713,16 +4749,49 @@ function renderCustomPlaylistsShelf() {
     });
 
     card.addEventListener('click', () => {
-      if (pl.tracks && pl.tracks.length > 0) {
-        state.queue = [...pl.tracks];
-        saveQueueToStorage();
-        renderQueueDrawer();
-        playTrack(pl.tracks[0]);
-      }
+      startPlaylistPlayback();
     });
 
     grid.appendChild(card);
   });
+}
+
+async function togglePlaylistTasteExclusion(plId, newExcludeState) {
+  const token = localStorage.getItem('songbuddy_token');
+  const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+
+  try {
+    const res = await fetch('/api/user/playlists/toggle-taste-exclusion', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: plId, exclude_from_taste: newExcludeState })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const pl = (state.userPlaylists || []).find(p => p.id === plId);
+      if (pl) {
+        pl.exclude_from_taste = data.exclude_from_taste;
+      }
+      renderCustomPlaylistsShelf();
+      if (state.playbackSource?.id === plId) {
+        state.playbackSource.excludeFromTaste = data.exclude_from_taste;
+        updatePlayerTasteExclusionBadge();
+      }
+      showToastNotification(data.exclude_from_taste ? 'Playlist excluded from taste profile' : 'Playlist included in taste profile');
+    }
+  } catch (err) {
+    showToastNotification('Failed to update taste exclusion');
+  }
+}
+
+function updatePlayerTasteExclusionBadge() {
+  const badge = $('player-taste-excluded-badge');
+  if (!badge) return;
+  if (state.playbackSource?.excludeFromTaste) {
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
 }
 
 async function deleteCustomPlaylist(plId, plName) {
@@ -4928,6 +4997,8 @@ function openCreatePlaylistModal() {
   }
   const descInput = $('create-playlist-desc');
   if (descInput) descInput.value = '';
+  const excludeInput = $('create-playlist-exclude-taste');
+  if (excludeInput) excludeInput.checked = false;
 }
 
 function closeCreatePlaylistModal() {
@@ -4940,6 +5011,8 @@ async function handleCreatePlaylistSubmit() {
   const descInput = $('create-playlist-desc');
   const name = (nameInput ? nameInput.value : '').trim();
   const desc = (descInput ? descInput.value : '').trim();
+  const excludeInput = $('create-playlist-exclude-taste');
+  const excludeFromTaste = excludeInput ? excludeInput.checked : false;
 
   if (!name) {
     showToastNotification('Please provide a playlist name');
@@ -4949,6 +5022,7 @@ async function handleCreatePlaylistSubmit() {
   const newPl = {
     name: name,
     description: desc,
+    exclude_from_taste: excludeFromTaste,
     tracks: []
   };
 
@@ -5439,22 +5513,26 @@ function recordTrackListeningTelemetry(track, cur, dur) {
   if (!track || !track.id || track._recordedPlay) return;
   if (cur >= 30 || (dur > 0 && cur >= dur * 0.5)) {
     track._recordedPlay = true;
-    state.listeningStats.tracksPlayed = (state.listeningStats.tracksPlayed || 0) + 1;
-    const durMin = dur > 0 ? Math.round(dur / 60) : 3;
-    state.listeningStats.totalMinutes = (state.listeningStats.totalMinutes || 0) + durMin;
-    if (!state.listeningStats.playCounts) state.listeningStats.playCounts = {};
-    const key = `${track.artist} - ${track.title}`;
-    state.listeningStats.playCounts[key] = (state.listeningStats.playCounts[key] || 0) + 1;
-    localStorage.setItem('songbuddy_listening_stats', JSON.stringify(state.listeningStats));
-    updateStatsUI();
+    const isTasteExcluded = Boolean(state.playbackSource?.excludeFromTaste || track.exclude_from_taste);
 
-    // Persist to server user history for smart playlists
+    if (!isTasteExcluded) {
+      state.listeningStats.tracksPlayed = (state.listeningStats.tracksPlayed || 0) + 1;
+      const durMin = dur > 0 ? Math.round(dur / 60) : 3;
+      state.listeningStats.totalMinutes = (state.listeningStats.totalMinutes || 0) + durMin;
+      if (!state.listeningStats.playCounts) state.listeningStats.playCounts = {};
+      const key = `${track.artist} - ${track.title}`;
+      state.listeningStats.playCounts[key] = (state.listeningStats.playCounts[key] || 0) + 1;
+      localStorage.setItem('songbuddy_listening_stats', JSON.stringify(state.listeningStats));
+      updateStatsUI();
+    }
+
+    // Persist to server user history for smart playlists (with exclusion flag)
     const token = localStorage.getItem('songbuddy_token');
     const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
     fetch('/api/user/history', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ track })
+      body: JSON.stringify({ track, exclude_from_taste: isTasteExcluded })
     }).catch(() => {});
   }
 }

@@ -63,11 +63,16 @@ class LibraryStore:
                         description TEXT DEFAULT '',
                         cover_url TEXT DEFAULT '',
                         tracks_json TEXT NOT NULL DEFAULT '[]',
+                        exclude_from_taste INTEGER DEFAULT 0,
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL
                     );
                 """)
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_playlists_user ON user_playlists(user_id);")
+                try:
+                    cursor.execute("ALTER TABLE user_playlists ADD COLUMN exclude_from_taste INTEGER DEFAULT 0;")
+                except Exception:
+                    pass
 
                 # Favorites Table
                 cursor.execute("""
@@ -117,7 +122,7 @@ class LibraryStore:
                 with self._get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "SELECT id, user_id, name, description, cover_url, tracks_json, created_at, updated_at "
+                        "SELECT id, user_id, name, description, cover_url, tracks_json, exclude_from_taste, created_at, updated_at "
                         "FROM user_playlists WHERE user_id = ? ORDER BY updated_at DESC",
                         (uid,)
                     )
@@ -128,6 +133,8 @@ class LibraryStore:
                             tracks = json.loads(r["tracks_json"])
                         except Exception:
                             tracks = []
+                        keys = r.keys()
+                        exclude = bool(r["exclude_from_taste"]) if "exclude_from_taste" in keys else False
                         playlists.append({
                             "id": r["id"],
                             "user_id": r["user_id"],
@@ -136,6 +143,7 @@ class LibraryStore:
                             "cover_url": r["cover_url"] or (tracks[0].get("thumbnail") if tracks else ""),
                             "track_count": len(tracks),
                             "tracks": tracks,
+                            "exclude_from_taste": exclude,
                             "created_at": r["created_at"],
                             "updated_at": r["updated_at"]
                         })
@@ -153,6 +161,7 @@ class LibraryStore:
         description = playlist_data.get("description", "").strip()
         tracks = playlist_data.get("tracks", [])
         cover_url = playlist_data.get("cover_url", "")
+        exclude_from_taste = 1 if playlist_data.get("exclude_from_taste") else 0
         if not cover_url and tracks:
             cover_url = tracks[0].get("thumbnail", "")
 
@@ -163,15 +172,16 @@ class LibraryStore:
                 with self._get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("""
-                        INSERT INTO user_playlists (id, user_id, name, description, cover_url, tracks_json, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO user_playlists (id, user_id, name, description, cover_url, tracks_json, exclude_from_taste, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             name = excluded.name,
                             description = excluded.description,
                             cover_url = excluded.cover_url,
                             tracks_json = excluded.tracks_json,
+                            exclude_from_taste = excluded.exclude_from_taste,
                             updated_at = excluded.updated_at;
-                    """, (pl_id, uid, name, description, cover_url, tracks_json, now, now))
+                    """, (pl_id, uid, name, description, cover_url, tracks_json, exclude_from_taste, now, now))
                     conn.commit()
             except Exception as e:
                 logger.error(f"Error saving playlist to SQLite: {e}")
@@ -180,6 +190,7 @@ class LibraryStore:
                 self._memory_cache["playlists"][uid][pl_id] = {
                     "id": pl_id, "user_id": uid, "name": name, "description": description,
                     "cover_url": cover_url, "tracks": tracks, "track_count": len(tracks),
+                    "exclude_from_taste": bool(exclude_from_taste),
                     "created_at": now, "updated_at": now
                 }
 
@@ -191,8 +202,34 @@ class LibraryStore:
             "cover_url": cover_url,
             "track_count": len(tracks),
             "tracks": tracks,
+            "exclude_from_taste": bool(exclude_from_taste),
             "updated_at": now
         }
+
+    def toggle_playlist_taste_exclusion(self, user_id: str, playlist_id: str, exclude: Optional[bool] = None) -> Dict[str, Any]:
+        """Toggles or explicitly sets Spotify-grade 'Exclude from your taste profile' on a custom playlist."""
+        uid = user_id.strip().lower()
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT exclude_from_taste FROM user_playlists WHERE id = ? AND user_id = ?", (playlist_id, uid))
+                    row = cursor.fetchone()
+                    if not row:
+                        return {"status": "error", "message": "Playlist not found"}
+                    current_val = bool(row["exclude_from_taste"])
+                    new_val = not current_val if exclude is None else bool(exclude)
+                    new_int = 1 if new_val else 0
+                    cursor.execute(
+                        "UPDATE user_playlists SET exclude_from_taste = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                        (new_int, now, playlist_id, uid)
+                    )
+                    conn.commit()
+                    return {"status": "success", "id": playlist_id, "exclude_from_taste": new_val}
+            except Exception as e:
+                logger.error(f"Error toggling taste exclusion for playlist {playlist_id}: {e}")
+                return {"status": "error", "message": str(e)}
 
     def delete_user_playlist(self, user_id: str, playlist_id: str) -> bool:
         uid = user_id.strip().lower()
@@ -288,11 +325,15 @@ class LibraryStore:
     # ---------------------------------------------------------
     # 3. Persistent Listening History & Smart Playlists
     # ---------------------------------------------------------
-    def record_user_play(self, user_id: str, track: Dict[str, Any]) -> Dict[str, Any]:
+    def record_user_play(self, user_id: str, track: Dict[str, Any], exclude_from_taste: bool = False) -> Dict[str, Any]:
         uid = user_id.strip().lower()
         track_id = track.get("id")
         if not track_id:
             return {"status": "error", "message": "Missing track ID"}
+
+        if exclude_from_taste:
+            logger.info(f"Skipping listening history recording for track '{track.get('title')}' (excluded from taste profile)")
+            return {"status": "skipped", "reason": "taste_excluded", "track_id": track_id}
 
         now = datetime.now(timezone.utc).isoformat()
         with self._lock:

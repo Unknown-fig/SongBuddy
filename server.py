@@ -1929,6 +1929,18 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
             self.send_json_response({"success": success, "deleted_id": pl_id}, status=200)
             return
 
+        # 2b. Custom User Playlists (Spotify-grade "Exclude from Taste Profile" Toggle)
+        elif path == "/api/user/playlists/toggle-taste-exclusion":
+            user = self.authenticate_request() or {"sub": "guest"}
+            pl_id = post_data.get("id", "")
+            if not pl_id:
+                self.send_json_error(400, "Missing playlist id parameter")
+                return
+            exclude = post_data.get("exclude_from_taste")
+            res = library_store.toggle_playlist_taste_exclusion(user.get("sub", "guest"), pl_id, exclude=exclude)
+            self.send_json_response(res, status=200)
+            return
+
         # 3. User Favorites (Toggle / Add / Remove)
         elif path == "/api/user/favorites":
             user = self.authenticate_request() or {"sub": "guest"}
@@ -1942,7 +1954,8 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         elif path == "/api/user/history":
             user = self.authenticate_request() or {"sub": "guest"}
             track = post_data.get("track", post_data)
-            res = library_store.record_user_play(user.get("sub", "guest"), track)
+            exclude_from_taste = bool(post_data.get("exclude_from_taste", False))
+            res = library_store.record_user_play(user.get("sub", "guest"), track, exclude_from_taste=exclude_from_taste)
             self.send_json_response(res, status=200)
             return
 

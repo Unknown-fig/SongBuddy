@@ -9987,6 +9987,146 @@ body.tv-mode-active .screen-ambilight-wrapper {
   background: rgba(239, 68, 68, 0.15);
 }
 
+/* ====================================================================
+   Spotify-Grade "Exclude from Taste Profile" Badges & Toggles
+   ==================================================================== */
+.badge-taste-excluded {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  margin-bottom: 8px;
+  width: fit-content;
+}
+
+.btn-custom-pl-taste {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-custom-pl-taste:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-custom-pl-taste.active {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
+.player-taste-excluded-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+  letter-spacing: 0.3px;
+  animation: tastePillGlow 3s ease-in-out infinite alternate;
+  white-space: nowrap;
+}
+
+@keyframes tastePillGlow {
+  0% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.2); }
+  100% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.45); }
+}
+
+.taste-profile-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.taste-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.taste-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.taste-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 22px;
+  transition: 0.25s;
+}
+
+.taste-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.25s;
+}
+
+.taste-toggle-switch input:checked + .taste-toggle-slider {
+  background-color: #10b981;
+}
+
+.taste-toggle-switch input:checked + .taste-toggle-slider:before {
+  transform: translateX(16px);
+}
+
+.taste-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.taste-toggle-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+}
+
+.taste-toggle-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.4;
+}
+
 /* Karaoke Mode & Vocal Suppression Styles */
 .chip-karaoke {
   position: relative;

@@ -19,7 +19,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=87">
+  <link rel="stylesheet" href="styles.css?v=88">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -1264,6 +1264,7 @@
         <div class="neu-meta-header-row">
           <h4 class="neu-track-title" id="player-track-name">Treat You Better</h4>
           <span class="player-media-badge tag-song hidden" id="player-media-badge">🎵 Song</span>
+          <span class="player-taste-excluded-badge hidden" id="player-taste-excluded-badge" title="Excluded from Taste Profile &bull; Does not affect your recommendations or Daily Mixes">🚫 Taste Excluded</span>
         </div>
         <div class="neu-meta-sub-row">
           <p class="neu-track-artist" id="player-track-artist">Shawn Mendes</p>
@@ -2961,6 +2962,16 @@
         <div class="import-input-wrap">
           <input type="text" id="create-playlist-desc" class="import-input" placeholder="e.g., Deep focus coding tracks" autocomplete="off">
         </div>
+        <div class="taste-profile-toggle-row">
+          <label class="taste-toggle-switch" for="create-playlist-exclude-taste">
+            <input type="checkbox" id="create-playlist-exclude-taste">
+            <span class="taste-toggle-slider"></span>
+          </label>
+          <div class="taste-toggle-info">
+            <span class="taste-toggle-title">Exclude from your taste profile</span>
+            <span class="taste-toggle-desc">Tracks played won't influence your Daily Mixes, Discover Weekly, or recommendations</span>
+          </div>
+        </div>
         <div class="import-actions-row">
           <button type="button" class="btn-import-cancel" id="btn-create-playlist-cancel">Cancel</button>
           <button type="button" class="btn-import-submit" id="btn-create-playlist-submit">Create Playlist</button>
@@ -3174,6 +3185,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=87"></script>
+  <script src="app.js?v=88"></script>
 </body>
 </html>

@@ -61,3 +61,39 @@ def test_cookie_health_probe():
     assert "status" in probe
     assert "entries_count" in probe
     assert probe["status"] in ("healthy", "expiring_soon", "expired", "missing")
+
+def test_playlist_taste_exclusion_lifecycle():
+    user_id = "test_taste_user"
+    # 1. Create playlist with exclude_from_taste=True
+    pl = library_store.save_user_playlist(user_id, {
+        "name": "Sleep Rain Sounds",
+        "description": "White noise and rain",
+        "exclude_from_taste": True,
+        "tracks": [
+            {"id": "rain_01", "title": "Gentle Rain", "artist": "Nature Soundscapes", "duration": 180}
+        ]
+    })
+    assert pl["name"] == "Sleep Rain Sounds"
+    assert pl["exclude_from_taste"] is True
+
+    # 2. Retrieve playlists and check exclude_from_taste
+    playlists = library_store.get_user_playlists(user_id)
+    created = next((p for p in playlists if p["id"] == pl["id"]), None)
+    assert created is not None
+    assert created["exclude_from_taste"] is True
+
+    # 3. Toggle exclusion off
+    toggle_res = library_store.toggle_playlist_taste_exclusion(user_id, pl["id"], exclude=False)
+    assert toggle_res["status"] == "success"
+    assert toggle_res["exclude_from_taste"] is False
+
+    # 4. Toggle exclusion back on
+    toggle_res2 = library_store.toggle_playlist_taste_exclusion(user_id, pl["id"])
+    assert toggle_res2["status"] == "success"
+    assert toggle_res2["exclude_from_taste"] is True
+
+    # 5. Verify recording play with exclude_from_taste skips history
+    skip_res = library_store.record_user_play(user_id, {"id": "rain_01", "title": "Gentle Rain", "artist": "Nature"}, exclude_from_taste=True)
+    assert skip_res["status"] == "skipped"
+    assert skip_res["reason"] == "taste_excluded"
+
