@@ -12627,3 +12627,368 @@ body.tv-mode-active .screen-ambilight-wrapper {
   }
 }
 
+/* ==========================================================================
+   SPOTIFY-GRADE SHAREABLE LYRIC CARD STUDIO MODAL STYLES
+   ========================================================================== */
+.share-lyrics-card-btn {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: #10b981 !important;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.share-lyrics-card-btn:hover {
+  background: #10b981 !important;
+  color: #000000 !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
+}
+
+.share-lyrics-card-btn:hover svg {
+  stroke: #000000 !important;
+}
+
+.lyric-card-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lyric-card-modal.hidden {
+  display: none !important;
+}
+
+.lyric-card-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.84);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+}
+
+.lyric-card-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 980px;
+  max-height: 90vh;
+  background: rgba(18, 18, 22, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.lyric-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lyric-card-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #10b981;
+  margin-bottom: 4px;
+}
+
+.lyric-card-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.lyric-card-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #94a3b8);
+  margin: 3px 0 0;
+}
+
+.lyric-card-workspace {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 28px;
+  padding: 24px 28px;
+  overflow-y: auto;
+  align-items: start;
+}
+
+.lyric-card-preview-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.lyric-card-canvas-wrapper {
+  width: 100%;
+  max-width: 360px;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  background: #000000;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lyric-card-canvas-wrapper:hover {
+  transform: scale(1.015);
+}
+
+#lyric-card-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 18px;
+}
+
+.lyric-preview-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted, #64748b);
+}
+
+.lyric-card-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lyric-ctrl-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lyric-ctrl-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lyric-ctrl-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.lyric-ctrl-counter {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.lyric-line-selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.lyric-select-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.lyric-select-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.lyric-select-item.selected {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.lyric-select-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: all 0.15s ease;
+}
+
+.lyric-select-item.selected .lyric-select-checkbox {
+  background: #10b981;
+  border-color: #10b981;
+}
+
+.lyric-select-checkbox svg {
+  display: none;
+}
+
+.lyric-select-item.selected .lyric-select-checkbox svg {
+  display: block;
+}
+
+.lyric-theme-swatches {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.theme-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.18s ease;
+}
+
+.theme-swatch:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.theme-swatch.active {
+  border-color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.2);
+}
+
+.swatch-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.lyric-ratio-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.ratio-pill {
+  padding: 7px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ratio-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.ratio-pill.active {
+  background: #ffffff;
+  color: #000000 !important;
+  font-weight: 700;
+  border-color: #ffffff;
+}
+
+.lyric-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-card-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 9999px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-card-action.primary {
+  background: #10b981;
+  color: #000000 !important;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.45);
+}
+
+.btn-card-action.primary:hover {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 26px rgba(16, 185, 129, 0.6);
+}
+
+.btn-card-action.primary svg {
+  stroke: #000000 !important;
+}
+
+.btn-card-action.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.btn-card-action.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 860px) {
+  .lyric-card-dialog {
+    max-height: 94vh;
+  }
+  .lyric-card-workspace {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 16px 20px;
+  }
+  .lyric-card-canvas-wrapper {
+    max-width: 280px;
+  }
+}
+

@@ -42,17 +42,22 @@ def test_trending_endpoint(client):
 @pytest.mark.integration
 def test_search_endpoint(client):
     """Test /api/search endpoint"""
+    from server import SEARCH_CACHE
+    SEARCH_CACHE.set("test_10_false", [{"id": "s1", "title": "Test Song", "artist": "Test Artist"}])
     client.request("GET", "/api/search?q=test")
     response = client.getresponse()
     
     assert response.status == 200
     data = json.loads(response.read().decode("utf-8"))
-    
     assert isinstance(data, list)
 
 @pytest.mark.integration
 def test_radio_endpoint(client):
     """Test /api/radio endpoint with seed id and artist parameter"""
+    from server import RADIO_CACHE
+    tracks = [{"id": "r1", "title": "Never Gonna Give You Up", "artist": "Rick Astley"}]
+    RADIO_CACHE.set("dQw4w9WgXcQ_Rick Astley", tracks)
+    RADIO_CACHE.set("dQw4w9WgXcQ:rick astley:en", tracks)
     client.request("GET", "/api/radio?id=dQw4w9WgXcQ&artist=Rick+Astley")
     response = client.getresponse()
     assert response.status == 200
@@ -66,6 +71,10 @@ def test_radio_endpoint(client):
 @pytest.mark.integration
 def test_radio_endpoint_with_title(client):
     """Test /api/radio endpoint with title parameter for language coherence"""
+    from server import RADIO_CACHE
+    tracks_in = [{"id": "r2", "title": "Kesariya", "artist": "Arijit Singh"}]
+    RADIO_CACHE.set("BddP6PY427U_Arijit Singh", tracks_in)
+    RADIO_CACHE.set("BddP6PY427U:arijit singh:in", tracks_in)
     client.request("GET", "/api/radio?id=BddP6PY427U&artist=Arijit+Singh&title=Kesariya")
     response = client.getresponse()
     assert response.status == 200
@@ -151,4 +160,80 @@ def test_queue_drawer_elements(client):
     assert "removeFromQueue" in js_content
     assert "removeFromRadioQueue" in js_content
     assert "clearRadioQueue" in js_content
+
+
+@pytest.mark.integration
+def test_recommendations_and_mixes_endpoints(client):
+    """Test Spotify Daily Mixes 1-6, Discover Weekly, and BaRT context endpoints"""
+    # 1. Daily Mixes
+    client.request("GET", "/api/recommendations/daily-mixes?user_id=dave")
+    resp_mixes = client.getresponse()
+    assert resp_mixes.status == 200
+    mix_data = json.loads(resp_mixes.read().decode("utf-8"))
+    assert mix_data["status"] == "success"
+    assert len(mix_data["mixes"]) == 6
+    assert mix_data["mixes"][0]["id"] == "daily_mix_1"
+
+    # 2. Discover Weekly
+    client.request("GET", "/api/recommendations/discover-weekly?user_id=dave")
+    resp_dw = client.getresponse()
+    assert resp_dw.status == 200
+    dw_data = json.loads(resp_dw.read().decode("utf-8"))
+    assert dw_data["status"] == "success"
+    assert "discover_weekly" in dw_data
+    assert len(dw_data["discover_weekly"]["tracks"]) >= 5
+
+    # 3. BaRT Context
+    client.request("GET", "/api/recommendations/context?user_id=dave")
+    resp_ctx = client.getresponse()
+    assert resp_ctx.status == 200
+    ctx_data = json.loads(resp_ctx.read().decode("utf-8"))
+    assert ctx_data["status"] == "success"
+    assert "exploration_rate" in ctx_data["context"]
+
+    # 4. BaRT Implicit Feedback
+    fb_payload = json.dumps({
+        "user_id": "dave",
+        "track_id": "4NRXx6U8ABQ",
+        "action": "stream",
+        "listen_seconds": 45
+    })
+    client.request("POST", "/api/recommendations/feedback", body=fb_payload, headers={"Content-Type": "application/json"})
+    resp_fb = client.getresponse()
+    assert resp_fb.status == 200
+    fb_data = json.loads(resp_fb.read().decode("utf-8"))
+    assert fb_data["status"] == "success"
+    assert fb_data["feedback"]["reward_delta"] == 1.0
+
+
+@pytest.mark.integration
+def test_buddy_feed_endpoints(client):
+    """Test Spotify-style Buddy Feed and Social listening endpoints"""
+    # 1. Fetch friend activity feed
+    client.request("GET", "/api/social/buddy-feed?limit=10")
+    resp_feed = client.getresponse()
+    assert resp_feed.status == 200
+    feed_data = json.loads(resp_feed.read().decode("utf-8"))
+    assert feed_data["status"] == "success"
+    assert "feed" in feed_data
+    assert "stats" in feed_data
+    assert isinstance(feed_data["feed"], list)
+
+    # 2. Privacy status
+    client.request("GET", "/api/social/privacy")
+    resp_priv = client.getresponse()
+    assert resp_priv.status == 200
+    priv_data = json.loads(resp_priv.read().decode("utf-8"))
+    assert priv_data["status"] == "success"
+    assert "private_session" in priv_data
+
+    # 3. Listen Along sync endpoint
+    client.request("GET", "/api/social/sync?friend_id=usr_elena")
+    resp_sync = client.getresponse()
+    assert resp_sync.status == 200
+    sync_data = json.loads(resp_sync.read().decode("utf-8"))
+    assert sync_data["status"] == "success"
+    assert "sync" in sync_data
+    assert sync_data["sync"]["friend_user_id"] == "usr_elena"
+
 

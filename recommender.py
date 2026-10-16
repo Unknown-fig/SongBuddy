@@ -34,6 +34,11 @@ except ImportError:
     SPOTIPY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
     SPOTIPY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 
+try:
+    from library_store import library_store
+except ImportError:
+    library_store = None
+
 logger = logging.getLogger("songbuddy.recommender")
 
 
@@ -261,7 +266,7 @@ class BaRTContextualBandit:
     - Session momentum (rapid skips trigger conservative safety guards)
     """
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.default_exploration_rate = 0.10
         self.session_skips: Dict[str, int] = {}       # user_id -> recent consecutive rapid skips
         self.session_streams: Dict[str, int] = {}     # user_id -> recent completed streams
@@ -343,14 +348,30 @@ class BaRTContextualBandit:
                 self.session_streams[uid] = current_streams + 1
 
             self.user_rewards[uid] = reward_score + reward_delta
+
+            consecutive_skips = self.session_skips[uid]
+            completed_streams = self.session_streams[uid]
+            if consecutive_skips >= 3:
+                exploration_rate = 0.0
+                momentum_state = "recovery_conservative"
+            elif consecutive_skips > 0:
+                exploration_rate = max(0.02, self.default_exploration_rate - (consecutive_skips * 0.04))
+                momentum_state = "cautious"
+            else:
+                exploration_rate = min(0.22, self.default_exploration_rate + (completed_streams * 0.02))
+                momentum_state = "exploratory"
+
             return {
                 "user_id": uid,
                 "track_id": track_id,
                 "action": action,
                 "reward_delta": reward_delta,
                 "total_reward": self.user_rewards[uid],
-                "consecutive_skips": self.session_skips[uid],
-                "completed_streams": self.session_streams[uid]
+                "consecutive_skips": consecutive_skips,
+                "completed_streams": completed_streams,
+                "momentum_state": momentum_state,
+                "exploration_rate": round(exploration_rate, 3),
+                "exploitation_rate": round(1.0 - exploration_rate, 3)
             }
 
 
@@ -727,10 +748,39 @@ class RecommendationEngine:
     # ---------------------------------------------------------
     # 5. Flagship Personalized Mixes: Daily Mix 1-6 & Discover Weekly
     # ---------------------------------------------------------
+    def _classify_track_cluster(self, track: Dict[str, Any]) -> int:
+        """
+        Classifies a track into one of the 6 canonical Spotify Daily Mix taste clusters:
+        0: Synthwave & Modern Pop Pulse (The Weeknd, Dua Lipa, synthwave, electronic, dance-pop)
+        1: Deep Focus & Lo-Fi Beats (Lofi Girl, ChilledCow, Nujabes, chillhop, study)
+        2: Bollywood & Desi Melodies (Arijit Singh, Sachin-Jigar, Punjabi, Hindi regional)
+        3: Late Night Hip-Hop & Rap (Travis Scott, Drake, Future, rap, hip hop, trap)
+        4: Rock & Stadium Anthems (Queen, Imagine Dragons, Coldplay, rock, metal, alternative)
+        5: Acoustic & Vocal Soul (Ed Sheeran, Adele, Billie Eilish, singer-songwriter, indie, folk)
+        """
+        title = (track.get("title") or "").lower()
+        artist = (track.get("artist") or "").lower()
+        genre = (track.get("genre") or "").lower()
+        combined = f"{title} {artist} {genre}"
+
+        if is_indian_hindi_track(title, artist) or any(k in combined for k in ("bollywood", "punjabi", "desi", "sufi", "qawwali")):
+            return 2
+        if any(k in combined for k in ("lofi", "lo-fi", "chillhop", "beats to study", "chilledcow", "nujabes", "focus", "ambient")):
+            return 1
+        if any(k in combined for k in ("hiphop", "hip-hop", "rap", "trap", "drill", "travis scott", "drake", "future", "kendrick", "eminem", "21 savage")):
+            return 3
+        if any(k in combined for k in ("rock", "queen", "imagine dragons", "coldplay", "guitar", "metal", "punk", "nirvana", "linkin park")):
+            return 4
+        if any(k in combined for k in ("acoustic", "adele", "ed sheeran", "billie eilish", "piano", "soul", "ballad", "unplugged", "folk")):
+            return 5
+        return 0
+
     def get_daily_mixes(self, user_id: str = "dave") -> List[Dict[str, Any]]:
         """
         Generates 6 distinct Daily Mixes by sub-taste clustering,
         mirroring Spotify's K-Means listening cluster architecture.
+        Dynamically clusters the user's actual library history & favorites,
+        blended with seed recommendations.
         """
         context = self.bandit.get_context_weights(user_id)
 
@@ -816,6 +866,49 @@ class RecommendationEngine:
             }
         ]
 
+        # Dynamic personalization from user's listening history & favorites
+        if library_store:
+            try:
+                user_tracks = []
+                favs = library_store.get_user_favorites(user_id) or []
+                history = library_store.get_user_history(user_id, limit=40) or []
+                seen_ids = set()
+
+                for trk in favs + history:
+                    tid = str(trk.get("track_id") or trk.get("id") or "").strip()
+                    if tid and tid not in seen_ids:
+                        seen_ids.add(tid)
+                        user_tracks.append({
+                            "id": tid,
+                            "title": trk.get("title", "Track"),
+                            "artist": trk.get("artist", "Artist"),
+                            "thumbnail": trk.get("thumbnail") or f"https://i.ytimg.com/vi/{tid}/hqdefault.jpg",
+                            "duration": int(trk.get("duration") or 210)
+                        })
+
+                # Cluster user tracks
+                user_clusters: Dict[int, List[Dict[str, Any]]] = {i: [] for i in range(6)}
+                for trk in user_tracks:
+                    c_idx = self._classify_track_cluster(trk)
+                    user_clusters[c_idx].append(trk)
+
+                for idx, mix in enumerate(mix_templates):
+                    clustered = user_clusters.get(idx, [])
+                    if clustered:
+                        template_tracks = [t for t in mix["tracks"] if t["id"] not in {u["id"] for u in clustered}]
+                        merged_tracks = clustered[:4] + template_tracks
+                        mix["tracks"] = merged_tracks[:6]
+
+                        top_artists = []
+                        for ut in clustered:
+                            art = ut.get("artist", "").strip()
+                            if art and art not in top_artists:
+                                top_artists.append(art)
+                        if top_artists:
+                            mix["subtitle"] = ", ".join(top_artists[:3])
+            except Exception as e:
+                logger.debug(f"User library cluster personalization fallback: {e}")
+
         # Annotate with context momentum & formatted durations
         for mix in mix_templates:
             for trk in mix["tracks"]:
@@ -829,10 +922,11 @@ class RecommendationEngine:
     def get_discover_weekly(self, user_id: str = "dave") -> Dict[str, Any]:
         """
         Generates Spotify's flagship 'Discover Weekly' playlist:
-        Prioritizes high-novelty exploration candidates across user's sub-taste clusters.
+        Prioritizes high-novelty exploration candidates across user's sub-taste clusters,
+        filtering out songs user has already played or favorited.
         """
         context = self.bandit.get_context_weights(user_id)
-        candidates = [
+        default_candidates = [
             {"id": "rQQU95aP_h8", "title": "Save Your Tears (Remix)", "artist": "The Weeknd, Ariana Grande", "duration": 191, "thumbnail": "https://i.ytimg.com/vi/rQQU95aP_h8/hqdefault.jpg", "novelty_score": 0.88},
             {"id": "b8T8yP7e-yI", "title": "Hallucinate", "artist": "Dua Lipa", "duration": 208, "thumbnail": "https://i.ytimg.com/vi/b8T8yP7e-yI/hqdefault.jpg", "novelty_score": 0.82},
             {"id": "7NOSDKb0HlU", "title": "Aruarian Dance", "artist": "Nujabes", "duration": 252, "thumbnail": "https://i.ytimg.com/vi/7NOSDKb0HlU/hqdefault.jpg", "novelty_score": 0.94},
@@ -840,6 +934,52 @@ class RecommendationEngine:
             {"id": "fPO76JdxS68", "title": "STARGAZING", "artist": "Travis Scott", "duration": 270, "thumbnail": "https://i.ytimg.com/vi/fPO76JdxS68/hqdefault.jpg", "novelty_score": 0.85},
             {"id": "2Vv-BfVoq4g", "title": "Shivers", "artist": "Ed Sheeran", "duration": 207, "thumbnail": "https://i.ytimg.com/vi/2Vv-BfVoq4g/hqdefault.jpg", "novelty_score": 0.76},
         ]
+
+        candidates = list(default_candidates)
+
+        if library_store:
+            try:
+                listened_ids = set()
+                favs = library_store.get_user_favorites(user_id) or []
+                history = library_store.get_user_history(user_id, limit=50) or []
+                for t in favs + history:
+                    tid = str(t.get("track_id") or t.get("id") or "").strip()
+                    if tid:
+                        listened_ids.add(tid)
+
+                query_vec = AcousticVector(
+                    energy=context.get("acoustic_bias", {}).get("energy", 0.65),
+                    valence=context.get("acoustic_bias", {}).get("valence", 0.60),
+                    danceability=context.get("acoustic_bias", {}).get("danceability", 0.65),
+                    acousticness=context.get("acoustic_bias", {}).get("acousticness", 0.35)
+                )
+                annoy_matches = self.annoy_index.query(query_vec, k=12)
+                discovered = []
+                for tid, sim in annoy_matches:
+                    if tid not in listened_ids:
+                        meta = self.annoy_index.metadata.get(tid)
+                        if meta:
+                            novelty = round(max(0.70, min(0.98, 1.0 - (sim * 0.2))), 2)
+                            discovered.append({
+                                "id": meta["id"],
+                                "title": meta["title"],
+                                "artist": meta["artist"],
+                                "thumbnail": meta.get("thumbnail") or f"https://i.ytimg.com/vi/{meta['id']}/hqdefault.jpg",
+                                "duration": 210,
+                                "novelty_score": novelty
+                            })
+                if discovered:
+                    filtered_defaults = [c for c in default_candidates if c["id"] not in listened_ids]
+                    combined = discovered + filtered_defaults
+                    seen = set()
+                    final_list = []
+                    for c in combined:
+                        if c["id"] not in seen:
+                            seen.add(c["id"])
+                            final_list.append(c)
+                    candidates = final_list[:8]
+            except Exception as e:
+                logger.debug(f"Discover weekly personalization fallback: {e}")
 
         for c in candidates:
             c["duration_formatted"] = format_duration(c.get("duration", 0))

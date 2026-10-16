@@ -43,7 +43,8 @@ from network_resilience import (
     cookie_pool_manager,
     fetch_sponsorblock_segments,
     inspect_cdn_stream_expiry,
-    refresh_stream_token
+    refresh_stream_token,
+    audio_disk_cache
 )
 from social_jukebox import (
     jukebox_manager,
@@ -1552,10 +1553,69 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
         if os.getenv("USE_SSL", "false").lower() == "true":
             self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
-        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-        self.send_header("Pragma", "no-cache")
+        has_cache_control = any(
+            isinstance(b, (bytes, bytearray)) and b.lower().startswith(b"cache-control:")
+            for b in getattr(self, "_headers_buffer", [])
+        )
+        if not has_cache_control:
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
 
         super().end_headers()
+
+    def _serve_local_audio_file(self, file_path: Path, content_type: str):
+        """Serves a local audio file with sub-millisecond latency and full HTTP 206 Partial Content (Range) support."""
+        try:
+            file_size = file_path.stat().st_size
+            range_header = self.headers.get("Range")
+
+            if not range_header:
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(file_size))
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("X-Audio-Cache-Hit", "true")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                with open(file_path, "rb") as f:
+                    shutil.copyfileobj(f, self.wfile, length=65536)
+                return
+
+            range_match = re.match(r"bytes=(\d+)-(\d*)", range_header.strip())
+            if not range_match:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+
+            start = int(range_match.group(1))
+            end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+            end = min(end, file_size - 1)
+            length = end - start + 1
+
+            self.send_response(206)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+            self.send_header("Content-Length", str(length))
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("X-Audio-Cache-Hit", "true")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+
+            with open(file_path, "rb") as f:
+                f.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk_to_read = min(65536, remaining)
+                    chunk = f.read(chunk_to_read)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except Exception as e:
+            logger.error(f"Error serving local audio file {file_path}: {e}")
 
     def do_OPTIONS(self):
         """CORS preflight request handling."""
@@ -2256,7 +2316,21 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
 
             def _bg_prewarm():
                 try:
-                    resolve_stream_url(vid, quality=quality)
+                    # 1. Skip network if full track already exists on disk
+                    if audio_disk_cache.find_cached_file(vid):
+                        return
+                    # 2. Resolve stream URL
+                    stream_info = resolve_stream_url(vid, quality=quality)
+                    stream_url = stream_info.get("stream_url")
+                    # 3. Pre-fetch first 256 KiB Track Head chunk
+                    if stream_url and not audio_disk_cache.get_head_chunk(vid):
+                        head_req = requests.get(
+                            stream_url,
+                            headers={"User-Agent": USER_AGENT, "Range": "bytes=0-262143"},
+                            timeout=6.0
+                        )
+                        if head_req.status_code in (200, 206) and len(head_req.content) > 1024:
+                            audio_disk_cache.save_head_chunk(vid, head_req.content)
                 except Exception as ex:
                     logger.debug(f"Prewarm background resolution for {vid}: {ex}")
 
@@ -2627,6 +2701,13 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 self.send_json_error(400, "Invalid YouTube video ID parameter.")
                 return
 
+            # Tier 1: Instant Local Audio Disk Cache (Spotify-style 0ms latency)
+            cached_file = audio_disk_cache.find_cached_file(vid)
+            if cached_file:
+                file_path, content_type = cached_file
+                self._serve_local_audio_file(file_path, content_type)
+                return
+
             try:
                 stream_info = resolve_stream_url(vid, quality=quality)
                 stream_url = stream_info["stream_url"]
@@ -2648,11 +2729,15 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 return
 
             req_headers = {"User-Agent": USER_AGENT}
-            if "Range" in self.headers:
-                req_headers["Range"] = self.headers["Range"]
+            range_header = self.headers.get("Range")
+            if range_header:
+                req_headers["Range"] = range_header
 
             resp = None
             headers_sent = False
+            temp_cache_path = None
+            final_cache_path = None
+            cache_file_handle = None
             try:
                 max_retries = 1
                 retry_count = 0
@@ -2675,13 +2760,39 @@ class SongBuddyHandler(SimpleHTTPRequestHandler):
                 for header in ["Content-Type", "Content-Range", "Content-Length", "Accept-Ranges"]:
                     if header in resp.headers:
                         self.send_header(header, resp.headers[header])
-                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Cache-Control", "public, max-age=86400")
                 self.end_headers()
                 headers_sent = True
 
+                # If streaming from beginning (no range or range starts at 0), capture to disk cache
+                is_full_stream = (not range_header) or range_header.strip().startswith("bytes=0-")
+                if is_full_stream and resp.status_code in (200, 206):
+                    try:
+                        temp_cache_path, final_cache_path = audio_disk_cache.get_cache_writer(vid)
+                        cache_file_handle = open(temp_cache_path, "wb")
+                    except Exception:
+                        cache_file_handle = None
+
+                head_captured = bytearray()
                 for chunk in resp.iter_content(chunk_size=65536):
                     if chunk:
                         self.wfile.write(chunk)
+                        if cache_file_handle:
+                            try:
+                                cache_file_handle.write(chunk)
+                            except Exception:
+                                pass
+                        if len(head_captured) < 262144:
+                            head_captured.extend(chunk[:262144 - len(head_captured)])
+
+                if head_captured and not audio_disk_cache.get_head_chunk(vid):
+                    audio_disk_cache.save_head_chunk(vid, bytes(head_captured))
+
+                if cache_file_handle:
+                    cache_file_handle.close()
+                    cache_file_handle = None
+                    if temp_cache_path and final_cache_path:
+                        audio_disk_cache.finalize_cache_file(temp_cache_path, final_cache_path)
                 return
 
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):

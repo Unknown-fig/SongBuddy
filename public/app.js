@@ -1000,6 +1000,35 @@ function prewarmTrack(videoId) {
 }
 window.prewarmTrack = prewarmTrack;
 
+// Spotify-Style Lookahead Queue Pre-Fetching Engine (Zero-Buffer Audio Preload)
+let preloadedAudio = null;
+let lastPrefetchedTrackId = null;
+
+function prefetchNextTrackAudio() {
+  const nextTrack = (state.queue && state.queue[0]) || (state.radioQueue && state.radioQueue[0]);
+  if (!nextTrack || !nextTrack.id || nextTrack.id === lastPrefetchedTrackId) return;
+
+  lastPrefetchedTrackId = nextTrack.id;
+  prewarmTrack(nextTrack.id);
+
+  if (!preloadedAudio) {
+    preloadedAudio = new Audio();
+    preloadedAudio.preload = 'auto';
+  }
+
+  const q = (state.audioEngine && state.audioEngine.quality) || 'high';
+  const streamUrl = nextTrack.offlineBlobUrl || nextTrack.streamUrl || `/api/stream?id=${encodeURIComponent(nextTrack.id)}&quality=${q}&redirect=false`;
+
+  preloadedAudio.src = streamUrl;
+  preloadedAudio.dataset.trackId = nextTrack.id;
+  try {
+    preloadedAudio.load();
+  } catch (e) {
+    console.debug('[Audio preload error]', e);
+  }
+}
+window.prefetchNextTrackAudio = prefetchNextTrackAudio;
+
 function addToQueue(track, silent = false) {
   if (!track || !track.id) return;
   prewarmTrack(track.id);
@@ -2002,7 +2031,12 @@ async function playTrack(track, options = { startRadio: true }) {
     try { ytPlayer.pauseVideo(); } catch (e) {}
   }
 
-  audio.src = streamUrl;
+  // Instant Audio Handover: If track was preloaded by lookahead queue prefetcher, play immediately
+  if (preloadedAudio && preloadedAudio.dataset.trackId === track.id && preloadedAudio.readyState >= 2) {
+    audio.src = preloadedAudio.src;
+  } else {
+    audio.src = streamUrl;
+  }
   audio.preload = 'auto';
   audio.load();
 
@@ -3105,6 +3139,526 @@ function closeLyrics() {
 window.closeLyrics = closeLyrics;
 
 // ============================================================================
+// SPOTIFY-GRADE SHAREABLE LYRIC CARD STUDIO
+// High-DPI Retina Canvas Rendering, Multi-Line Selection & Multi-Ratio Export
+// ============================================================================
+const lyricCardState = {
+  selectedLines: [],
+  theme: 'emerald',
+  ratio: 'portrait',
+  isOpen: false
+};
+
+const LYRIC_CARD_THEMES = {
+  emerald: {
+    bgGradient: ['#10b981', '#064e3b', '#022c22'],
+    glow: 'rgba(16, 185, 129, 0.35)',
+    textColor: '#ffffff',
+    accentColor: '#34d399',
+    quoteColor: '#6ee7b7',
+    badgeBg: 'rgba(16, 185, 129, 0.25)',
+    badgeBorder: 'rgba(52, 211, 153, 0.4)',
+    artistColor: '#a7f3d0'
+  },
+  obsidian: {
+    bgGradient: ['#27272a', '#18181b', '#09090b'],
+    glow: 'rgba(255, 255, 255, 0.12)',
+    textColor: '#ffffff',
+    accentColor: '#10b981',
+    quoteColor: '#e4e4e7',
+    badgeBg: 'rgba(255, 255, 255, 0.1)',
+    badgeBorder: 'rgba(255, 255, 255, 0.2)',
+    artistColor: '#a1a1aa'
+  },
+  sunset: {
+    bgGradient: ['#c026d3', '#7e22ce', '#3b0764'],
+    glow: 'rgba(217, 70, 239, 0.35)',
+    textColor: '#ffffff',
+    accentColor: '#f472b6',
+    quoteColor: '#f0abfc',
+    badgeBg: 'rgba(192, 38, 211, 0.25)',
+    badgeBorder: 'rgba(244, 114, 182, 0.4)',
+    artistColor: '#f5d0fe'
+  },
+  cyber: {
+    bgGradient: ['#06b6d4', '#0284c7', '#0f172a'],
+    glow: 'rgba(6, 182, 212, 0.35)',
+    textColor: '#ffffff',
+    accentColor: '#38bdf8',
+    quoteColor: '#7dd3fc',
+    badgeBg: 'rgba(6, 182, 212, 0.25)',
+    badgeBorder: 'rgba(56, 189, 248, 0.4)',
+    artistColor: '#bae6fd'
+  },
+  crimson: {
+    bgGradient: ['#f43f5e', '#be123c', '#4c0519'],
+    glow: 'rgba(244, 63, 94, 0.35)',
+    textColor: '#ffffff',
+    accentColor: '#fb7185',
+    quoteColor: '#fda4af',
+    badgeBg: 'rgba(244, 63, 94, 0.25)',
+    badgeBorder: 'rgba(251, 113, 133, 0.4)',
+    artistColor: '#fecdd3'
+  }
+};
+
+function getAvailableLyricLines() {
+  if (state.lyrics?.synced && state.lyrics.synced.length > 0) {
+    return state.lyrics.synced
+      .map(item => (typeof item === 'string' ? item : item.text || '').trim())
+      .filter(line => line.length > 0);
+  }
+  if (state.lyrics?.plain && typeof state.lyrics.plain === 'string') {
+    return state.lyrics.plain
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+  }
+  return [];
+}
+
+function openLyricCardStudio() {
+  const lines = getAvailableLyricLines();
+  if (!lines || lines.length === 0) {
+    showToastNotification('No lyrics available to create a lyric card for this song');
+    return;
+  }
+
+  // Pre-select current active line or first line
+  lyricCardState.selectedLines = [];
+  let defaultIdx = 0;
+  if (state.lyrics?.activeIndex >= 0 && state.lyrics.activeIndex < lines.length) {
+    defaultIdx = state.lyrics.activeIndex;
+  }
+  lyricCardState.selectedLines.push(lines[defaultIdx] || lines[0]);
+
+  populateLyricLineSelector(lines);
+  updateLyricSelectedCount();
+
+  const modal = $('lyric-card-modal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    lyricCardState.isOpen = true;
+  }
+
+  // Render initial card
+  requestAnimationFrame(() => {
+    renderLyricCard();
+  });
+}
+
+function closeLyricCardStudio() {
+  const modal = $('lyric-card-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    lyricCardState.isOpen = false;
+  }
+}
+
+function updateLyricSelectedCount() {
+  const counter = $('lyric-selected-count');
+  if (counter) {
+    counter.textContent = `${lyricCardState.selectedLines.length} / 4 lines selected`;
+  }
+}
+
+function populateLyricLineSelector(lines) {
+  const container = $('lyric-line-selector-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  lines.forEach((line) => {
+    const isSelected = lyricCardState.selectedLines.includes(line);
+    const item = document.createElement('div');
+    item.className = `lyric-select-item${isSelected ? ' selected' : ''}`;
+    item.setAttribute('role', 'button');
+    item.setAttribute('tabindex', '0');
+
+    item.innerHTML = `
+      <div class="lyric-select-checkbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <span class="lyric-select-text">${escapeHTML(line)}</span>
+    `;
+
+    item.addEventListener('click', () => {
+      toggleLyricLineSelection(line, item);
+    });
+
+    container.appendChild(item);
+  });
+}
+
+function toggleLyricLineSelection(line, itemEl) {
+  const existingIdx = lyricCardState.selectedLines.indexOf(line);
+  if (existingIdx !== -1) {
+    if (lyricCardState.selectedLines.length <= 1) {
+      showToastNotification('At least one lyric line must be selected');
+      return;
+    }
+    lyricCardState.selectedLines.splice(existingIdx, 1);
+    itemEl.classList.remove('selected');
+  } else {
+    if (lyricCardState.selectedLines.length >= 4) {
+      showToastNotification('Maximum 4 lyric lines can be selected');
+      return;
+    }
+    lyricCardState.selectedLines.push(line);
+    itemEl.classList.add('selected');
+  }
+
+  updateLyricSelectedCount();
+  renderLyricCard();
+}
+
+// Canvas Rendering Helpers
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = words[0] || '';
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    const width = ctx.measureText(currentLine + ' ' + word).width;
+    if (width < maxWidth) {
+      currentLine += ' ' + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  lines.push(currentLine);
+  return lines;
+}
+
+function renderLyricCard() {
+  const canvas = $('lyric-card-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  // Dimensions based on selected aspect ratio (HD Retina specs)
+  let W = 1080;
+  let H = 1350; // default 4:5 portrait
+  if (lyricCardState.ratio === 'story') {
+    H = 1920; // 9:16 story
+  } else if (lyricCardState.ratio === 'square') {
+    H = 1080; // 1:1 square
+  }
+
+  canvas.width = W;
+  canvas.height = H;
+
+  const theme = LYRIC_CARD_THEMES[lyricCardState.theme] || LYRIC_CARD_THEMES.emerald;
+  const currentSong = state.currentSong || {
+    title: 'Untitled Song',
+    artist: 'SongBuddy Artist',
+    album: 'Exclusive Single',
+    thumbnail: ''
+  };
+
+  // 1. Background Gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+  bgGrad.addColorStop(0, theme.bgGradient[0]);
+  bgGrad.addColorStop(0.5, theme.bgGradient[1]);
+  bgGrad.addColorStop(1, theme.bgGradient[2]);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // 2. Ambient Glow Mesh
+  const glow1 = ctx.createRadialGradient(W * 0.2, H * 0.2, 50, W * 0.2, H * 0.2, W * 0.8);
+  glow1.addColorStop(0, theme.glow);
+  glow1.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow1;
+  ctx.fillRect(0, 0, W, H);
+
+  const glow2 = ctx.createRadialGradient(W * 0.85, H * 0.75, 80, W * 0.85, H * 0.75, W * 0.7);
+  glow2.addColorStop(0, theme.glow);
+  glow2.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow2;
+  ctx.fillRect(0, 0, W, H);
+
+  // 3. Inner Frosted Glass Card Body
+  const margin = 80;
+  const cardX = margin;
+  const cardY = margin;
+  const cardW = W - margin * 2;
+  const cardH = H - margin * 2;
+  const cardRadius = 48;
+
+  ctx.save();
+  drawRoundedRect(ctx, cardX, cardY, cardW, cardH, cardRadius);
+  ctx.fillStyle = 'rgba(10, 10, 15, 0.4)';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = theme.badgeBorder;
+  ctx.stroke();
+  ctx.restore();
+
+  // 4. Header: Brand badge + Waveform Bars
+  const pad = 64;
+  const topY = cardY + pad;
+
+  // Header Brand Pill
+  ctx.save();
+  const brandPillW = 260;
+  const brandPillH = 52;
+  const brandPillX = cardX + pad;
+  drawRoundedRect(ctx, brandPillX, topY, brandPillW, brandPillH, 26);
+  ctx.fillStyle = theme.badgeBg;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = theme.badgeBorder;
+  ctx.stroke();
+
+  ctx.fillStyle = theme.accentColor;
+  ctx.font = '700 22px "Outfit", "Inter", -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('✦ SONGBUDDY', brandPillX + 24, topY + brandPillH / 2);
+  ctx.restore();
+
+  // Draw Spotify-style Sound Waveform Bars on top-right
+  ctx.save();
+  const barsX = cardX + cardW - pad - 120;
+  const barYCenter = topY + brandPillH / 2;
+  const barHeights = [20, 36, 16, 42, 28, 14];
+  ctx.fillStyle = theme.accentColor;
+  barHeights.forEach((bh, bIdx) => {
+    drawRoundedRect(ctx, barsX + bIdx * 18, barYCenter - bh / 2, 8, bh, 4);
+    ctx.fill();
+  });
+  ctx.restore();
+
+  // 5. Featured Lyrics Body
+  const lyricsYStart = topY + 140;
+  const maxLyricsW = cardW - pad * 2;
+
+  // Giant Opening Quote Mark
+  ctx.save();
+  ctx.fillStyle = theme.quoteColor;
+  ctx.globalAlpha = 0.35;
+  ctx.font = '800 120px Georgia, serif';
+  ctx.fillText('“', cardX + pad - 10, lyricsYStart + 20);
+  ctx.restore();
+
+  // Lyrics text lines
+  ctx.save();
+  ctx.fillStyle = theme.textColor;
+  ctx.textBaseline = 'top';
+
+  const lineCount = lyricCardState.selectedLines.length;
+  let fontSize = 48;
+  let lineHeight = 72;
+  if (lineCount === 1) {
+    fontSize = lyricCardState.ratio === 'story' ? 58 : 52;
+    lineHeight = fontSize * 1.5;
+  } else if (lineCount === 2) {
+    fontSize = 46;
+    lineHeight = 70;
+  } else if (lineCount >= 3) {
+    fontSize = lyricCardState.ratio === 'square' ? 36 : 42;
+    lineHeight = fontSize * 1.48;
+  }
+  ctx.font = `700 ${fontSize}px "Outfit", "Inter", -apple-system, sans-serif`;
+
+  let currentY = lyricsYStart + 50;
+  lyricCardState.selectedLines.forEach(rawLine => {
+    const wrapped = wrapCanvasText(ctx, `"${rawLine}"`, maxLyricsW);
+    wrapped.forEach(l => {
+      ctx.fillText(l, cardX + pad, currentY);
+      currentY += lineHeight;
+    });
+    currentY += 16;
+  });
+  ctx.restore();
+
+  // 6. Track Footer: Artwork, Title, Artist
+  const footerH = 140;
+  const footerY = cardY + cardH - pad - footerH;
+
+  const thumbSize = 130;
+  const thumbX = cardX + pad;
+  const thumbY = footerY;
+
+  const renderMetadata = () => {
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 34px "Outfit", "Inter", -apple-system, sans-serif';
+    ctx.textBaseline = 'top';
+    const titleX = thumbX + thumbSize + 32;
+    const maxTitleW = cardW - pad * 2 - thumbSize - 60;
+
+    let displayTitle = currentSong.title || 'Untitled Track';
+    if (ctx.measureText(displayTitle).width > maxTitleW) {
+      while (ctx.measureText(displayTitle + '...').width > maxTitleW && displayTitle.length > 0) {
+        displayTitle = displayTitle.slice(0, -1);
+      }
+      displayTitle += '...';
+    }
+    ctx.fillText(displayTitle, titleX, thumbY + 16);
+
+    ctx.fillStyle = theme.artistColor;
+    ctx.font = '500 26px "Outfit", "Inter", -apple-system, sans-serif';
+    let displayArtist = currentSong.artist || 'Unknown Artist';
+    if (ctx.measureText(displayArtist).width > maxTitleW) {
+      while (ctx.measureText(displayArtist + '...').width > maxTitleW && displayArtist.length > 0) {
+        displayArtist = displayArtist.slice(0, -1);
+      }
+      displayArtist += '...';
+    }
+    ctx.fillText(displayArtist, titleX, thumbY + 68);
+    ctx.restore();
+  };
+
+  function drawFallbackThumb() {
+    ctx.save();
+    drawRoundedRect(ctx, thumbX, thumbY, thumbSize, thumbSize, 24);
+    ctx.fillStyle = theme.badgeBg;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = theme.badgeBorder;
+    ctx.stroke();
+
+    ctx.fillStyle = theme.accentColor;
+    ctx.font = '800 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('♪', thumbX + thumbSize / 2, thumbY + thumbSize / 2);
+    ctx.restore();
+  }
+
+  if (currentSong.thumbnail) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      ctx.save();
+      drawRoundedRect(ctx, thumbX, thumbY, thumbSize, thumbSize, 24);
+      ctx.clip();
+      ctx.drawImage(img, thumbX, thumbY, thumbSize, thumbSize);
+      ctx.restore();
+
+      ctx.save();
+      drawRoundedRect(ctx, thumbX, thumbY, thumbSize, thumbSize, 24);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.stroke();
+      ctx.restore();
+
+      renderMetadata();
+    };
+    img.onerror = () => {
+      drawFallbackThumb();
+      renderMetadata();
+    };
+    img.src = currentSong.thumbnail;
+  } else {
+    drawFallbackThumb();
+    renderMetadata();
+  }
+}
+
+function downloadLyricCardImage() {
+  const canvas = $('lyric-card-canvas');
+  if (!canvas) return;
+
+  const trackTitle = (state.currentSong?.title || 'SongBuddy').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim();
+  const filename = `${trackTitle} - SongBuddy Lyric Card.png`;
+
+  canvas.toBlob(blob => {
+    if (!blob) {
+      showToastNotification('Failed to export image from canvas');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToastNotification('Lyric card saved to your device!');
+  }, 'image/png', 1.0);
+}
+
+function copyLyricCardImage() {
+  const canvas = $('lyric-card-canvas');
+  if (!canvas) return;
+
+  if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+    downloadLyricCardImage();
+    showToastNotification('Direct copy not supported in browser; image downloaded instead');
+    return;
+  }
+
+  canvas.toBlob(blob => {
+    if (!blob) {
+      showToastNotification('Failed to generate image blob');
+      return;
+    }
+    try {
+      const item = new ClipboardItem({ 'image/png': blob });
+      navigator.clipboard.write([item]).then(() => {
+        showToastNotification('Lyric card copied to clipboard!');
+      }).catch(err => {
+        console.warn('Clipboard write error:', err);
+        downloadLyricCardImage();
+        showToastNotification('Copied as download to device');
+      });
+    } catch (err) {
+      downloadLyricCardImage();
+      showToastNotification('Copied as download to device');
+    }
+  }, 'image/png', 1.0);
+}
+
+function shareLyricCardNative() {
+  const canvas = $('lyric-card-canvas');
+  if (!canvas) return;
+
+  const trackTitle = state.currentSong?.title || 'Song';
+  const trackArtist = state.currentSong?.artist || 'SongBuddy';
+
+  canvas.toBlob(blob => {
+    if (!blob) {
+      downloadLyricCardImage();
+      return;
+    }
+    const file = new File([blob], `${trackTitle} - Lyric Card.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({
+        title: `${trackTitle} - ${trackArtist}`,
+        text: `Listen with synced lyrics on SongBuddy: "${trackTitle}" by ${trackArtist}`,
+        files: [file]
+      }).then(() => {
+        showToastNotification('Lyric card shared successfully!');
+      }).catch(e => {
+        if (e.name !== 'AbortError') {
+          copyLyricCardImage();
+        }
+      });
+    } else {
+      copyLyricCardImage();
+    }
+  }, 'image/png', 1.0);
+}
 
 // ============================================================================
 // Spotify Client Architecture: In-Memory LRU Prefix Cache & Keystroke Pipeline
@@ -6691,6 +7245,10 @@ function setupAudioListeners() {
   audio.addEventListener('timeupdate', () => {
     if (!isYTActive) {
       updateProgressUI(audio.currentTime, audio.duration);
+      // Spotify-Style Lookahead Queue Pre-Fetch: Preload next song when 25s remain or at 80% completion
+      if (audio.duration && (audio.duration - audio.currentTime <= 25 || audio.currentTime / audio.duration > 0.80)) {
+        prefetchNextTrackAudio();
+      }
     }
   });
 
@@ -8101,6 +8659,34 @@ function setupEventListeners() {
   $('lyrics-overlay-backdrop')?.addEventListener('click', closeLyrics);
   $('btn-lyrics-font-size')?.addEventListener('click', toggleLyricsFontSize);
   $('btn-lyrics-fullscreen')?.addEventListener('click', () => toggleLyricsFullscreen());
+
+  // Lyric Card Studio Listeners
+  $('btn-share-lyric-card')?.addEventListener('click', openLyricCardStudio);
+  $('btn-close-lyric-card')?.addEventListener('click', closeLyricCardStudio);
+  $('lyric-card-backdrop')?.addEventListener('click', closeLyricCardStudio);
+  $('btn-download-lyric-card')?.addEventListener('click', downloadLyricCardImage);
+  $('btn-copy-lyric-card')?.addEventListener('click', copyLyricCardImage);
+  $('btn-native-share-card')?.addEventListener('click', shareLyricCardNative);
+
+  // Theme swatch selectors
+  document.querySelectorAll('#lyric-theme-swatches .theme-swatch').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#lyric-theme-swatches .theme-swatch').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      lyricCardState.theme = btn.dataset.theme;
+      renderLyricCard();
+    });
+  });
+
+  // Aspect ratio selectors
+  document.querySelectorAll('#lyric-ratio-pills .ratio-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#lyric-ratio-pills .ratio-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      lyricCardState.ratio = btn.dataset.ratio;
+      renderLyricCard();
+    });
+  });
 
   // Authentication & Login Modal Listeners
   $('btn-close-auth-overlay')?.addEventListener('click', closeAuthModal);

@@ -15,9 +15,11 @@ Includes:
 
 import os
 import sys
+import re
 import time
 import json
 import logging
+import threading
 import urllib.parse
 from pathlib import Path
 from datetime import datetime, timezone
@@ -519,3 +521,125 @@ def fetch_sponsorblock_segments(video_id: str) -> Dict[str, Any]:
             continue
 
     return {"has_segments": False, "segments": [], "error": "API unreachable"}
+
+
+# ============================================================================
+# 4. Spotify-Modeled Multi-Tier Audio Disk Cache & Head Chunk Accelerator
+# ============================================================================
+class AudioDiskCacheManager:
+    """
+    Implements Spotify-style multi-tier local audio caching:
+    - Verifies local disk cache (.audio_cache, downloads/) before initiating remote network calls.
+    - Serves sub-millisecond local Range (206) requests directly from disk without external buffering.
+    - Pre-caches first 256 KiB 'Track Head' chunks to achieve instant cold-start playback.
+    - Asynchronously stores streaming segments with bounded LRU eviction limits.
+    """
+    def __init__(self, cache_dir: Optional[Path] = None, max_cache_bytes: int = 500 * 1024 * 1024):
+        self.cache_dir = cache_dir or (BASE_DIR / "downloads" / ".audio_cache")
+        self.max_cache_bytes = max_cache_bytes
+        self._lock = threading.Lock()
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.warning(f"Could not create audio cache directory {self.cache_dir}: {e}")
+
+    @staticmethod
+    def _sanitize(name: str) -> str:
+        return re.sub(r'[\\/*?:"<>|]', "", str(name)).strip()
+
+    def find_cached_file(self, video_id: str) -> Optional[Tuple[Path, str]]:
+        """
+        Searches local downloads directory and .audio_cache for an existing audio file.
+        Returns (path, content_type) if found.
+        """
+        vid = self._sanitize(video_id)
+        if not vid:
+            return None
+
+        # 1. Check in .audio_cache
+        for ext, ctype in [("webm", "audio/webm; codecs=opus"), ("mp3", "audio/mpeg"), ("m4a", "audio/mp4")]:
+            p = self.cache_dir / f"{vid}.{ext}"
+            if p.exists() and p.stat().st_size > 1024:
+                return (p, ctype)
+
+        # 2. Check in main DOWNLOAD_DIR for finished user downloads
+        try:
+            download_dir = BASE_DIR / "downloads"
+            if download_dir.exists():
+                for p in download_dir.glob(f"*{vid}*.*"):
+                    if p.suffix.lower() == ".mp3" and p.stat().st_size > 1024:
+                        return (p, "audio/mpeg")
+                    elif p.suffix.lower() == ".webm" and p.stat().st_size > 1024:
+                        return (p, "audio/webm; codecs=opus")
+                    elif p.suffix.lower() == ".m4a" and p.stat().st_size > 1024:
+                        return (p, "audio/mp4")
+        except Exception:
+            pass
+
+        return None
+
+    def get_head_chunk(self, video_id: str) -> Optional[bytes]:
+        """Returns the pre-cached first 256 KiB track head if available."""
+        vid = self._sanitize(video_id)
+        p = self.cache_dir / f"{vid}.head"
+        if p.exists() and p.stat().st_size > 0:
+            try:
+                with open(p, "rb") as f:
+                    return f.read()
+            except Exception:
+                pass
+        return None
+
+    def save_head_chunk(self, video_id: str, data: bytes):
+        """Saves the initial track head chunk (<512 KiB) for instant cold start."""
+        vid = self._sanitize(video_id)
+        if not vid or not data:
+            return
+        p = self.cache_dir / f"{vid}.head"
+        try:
+            with open(p, "wb") as f:
+                f.write(data)
+        except Exception as e:
+            logger.debug(f"Failed to write audio head chunk for {vid}: {e}")
+
+    def get_cache_writer(self, video_id: str, ext: str = "webm") -> Tuple[Path, Path]:
+        """Returns temporary and final file paths for streaming cache writes."""
+        vid = self._sanitize(video_id)
+        temp_p = self.cache_dir / f"{vid}.{ext}.tmp"
+        final_p = self.cache_dir / f"{vid}.{ext}"
+        return temp_p, final_p
+
+    def finalize_cache_file(self, temp_p: Path, final_p: Path):
+        try:
+            if temp_p.exists() and temp_p.stat().st_size > 32768:
+                if final_p.exists():
+                    final_p.unlink(missing_ok=True)
+                temp_p.rename(final_p)
+                self._prune_lru()
+        except Exception as e:
+            logger.debug(f"Failed to finalize audio cache file: {e}")
+            try:
+                temp_p.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    def _prune_lru(self):
+        """Prunes oldest cache files if exceeding max_cache_bytes."""
+        with self._lock:
+            try:
+                files = list(self.cache_dir.glob("*.*"))
+                total_size = sum(f.stat().st_size for f in files if f.is_file())
+                if total_size <= self.max_cache_bytes:
+                    return
+                files.sort(key=lambda f: f.stat().st_mtime)
+                for f in files:
+                    if total_size <= self.max_cache_bytes * 0.8:
+                        break
+                    sz = f.stat().st_size
+                    f.unlink(missing_ok=True)
+                    total_size -= sz
+            except Exception as e:
+                logger.debug(f"Audio cache pruning error: {e}")
+
+audio_disk_cache = AudioDiskCacheManager()
+

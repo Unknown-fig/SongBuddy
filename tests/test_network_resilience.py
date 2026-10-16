@@ -235,3 +235,31 @@ def test_http_cookie_rotate_endpoint(client):
     assert "success" in data
     assert "metrics" in data
 
+
+def test_audio_disk_cache_manager(tmp_path):
+    from network_resilience import AudioDiskCacheManager
+    mgr = AudioDiskCacheManager(cache_dir=tmp_path / ".audio_cache", max_cache_bytes=1024 * 1024)
+
+    # 1. Save and retrieve track head chunk
+    sample_head = b"\x1a\x45\xdf\xa3" + b"\x00" * 4096
+    mgr.save_head_chunk("test_vid_1", sample_head)
+    retrieved = mgr.get_head_chunk("test_vid_1")
+    assert retrieved == sample_head
+
+    # 2. Cache streaming writer and finalizer
+    temp_p, final_p = mgr.get_cache_writer("test_vid_1", ext="webm")
+    with open(temp_p, "wb") as f:
+        f.write(b"AUDIO_DATA" * 5000)  # > 32KB
+    mgr.finalize_cache_file(temp_p, final_p)
+    assert final_p.exists()
+
+    # 3. Find cached file
+    cached = mgr.find_cached_file("test_vid_1")
+    assert cached is not None
+    assert cached[0] == final_p
+    assert "audio/webm" in cached[1]
+
+    # Non-existent track returns None
+    assert mgr.find_cached_file("non_existent_vid") is None
+
+

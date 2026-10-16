@@ -19,7 +19,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=86">
+  <link rel="stylesheet" href="styles.css?v=87">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E">
 
   <!-- Progressive Web App (PWA) Manifest & Meta Tags -->
@@ -1749,6 +1749,14 @@
             </svg>
             <span>Import LRC</span>
           </button>
+          <button type="button" class="lyrics-action-btn share-lyrics-card-btn" id="btn-share-lyric-card" title="Create Shareable Lyric Card">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+              <polyline points="16 6 12 2 8 6"></polyline>
+              <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+            <span>Share Card</span>
+          </button>
           <input type="file" id="lrc-file-input" accept=".lrc,.txt" style="display:none;">
           <button class="close-overlay-btn" id="btn-close-lyrics-overlay" title="Close lyrics">&times;</button>
         </div>
@@ -1818,6 +1826,113 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                 <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
               </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       SPOTIFY-GRADE SHAREABLE LYRIC CARD STUDIO MODAL
+       ==================================================================== -->
+  <div id="lyric-card-modal" class="lyric-card-modal hidden" aria-modal="true" role="dialog" aria-label="Shareable Lyric Card Studio">
+    <div class="lyric-card-backdrop" id="lyric-card-backdrop"></div>
+    <div class="lyric-card-dialog">
+      <div class="lyric-card-header">
+        <div class="lyric-card-header-left">
+          <span class="lyric-card-badge">✦ Spotify-Grade Lyric Card</span>
+          <h3 class="lyric-card-title">Share Lyric Card</h3>
+          <p class="lyric-card-subtitle">Select lines, customize aesthetic theme, and export in HD</p>
+        </div>
+        <button type="button" class="close-overlay-btn" id="btn-close-lyric-card" title="Close Studio">&times;</button>
+      </div>
+
+      <div class="lyric-card-workspace">
+        <!-- Live Card Preview Canvas -->
+        <div class="lyric-card-preview-container">
+          <div class="lyric-card-canvas-wrapper" id="lyric-card-canvas-wrapper">
+            <canvas id="lyric-card-canvas" width="1080" height="1350"></canvas>
+          </div>
+          <span class="lyric-preview-hint">Live 2× Retina Preview &bull; Click card to zoom</span>
+        </div>
+
+        <!-- Customization Controls Panel -->
+        <div class="lyric-card-controls">
+          <!-- Step 1: Select Lyric Lines -->
+          <div class="lyric-ctrl-section">
+            <div class="lyric-ctrl-title-row">
+              <span class="lyric-ctrl-label">Featured Lyrics</span>
+              <span class="lyric-ctrl-counter" id="lyric-selected-count">1 / 4 lines selected</span>
+            </div>
+            <div class="lyric-line-selector-list" id="lyric-line-selector-list">
+              <!-- Populated dynamically with selectable items of track lyrics -->
+            </div>
+          </div>
+
+          <!-- Step 2: Theme Selector -->
+          <div class="lyric-ctrl-section">
+            <span class="lyric-ctrl-label">Aesthetic Theme</span>
+            <div class="lyric-theme-swatches" id="lyric-theme-swatches">
+              <button type="button" class="theme-swatch active" data-theme="emerald" title="Spotify Emerald">
+                <span class="swatch-color" style="background: linear-gradient(135deg, #10b981 0%, #064e3b 100%);"></span>
+                <span class="swatch-name">Emerald</span>
+              </button>
+              <button type="button" class="theme-swatch" data-theme="obsidian" title="Obsidian Dark">
+                <span class="swatch-color" style="background: linear-gradient(135deg, #27272a 0%, #09090b 100%);"></span>
+                <span class="swatch-name">Obsidian</span>
+              </button>
+              <button type="button" class="theme-swatch" data-theme="sunset" title="Sunset Violet">
+                <span class="swatch-color" style="background: linear-gradient(135deg, #8b5cf6 0%, #3b0764 100%);"></span>
+                <span class="swatch-name">Sunset</span>
+              </button>
+              <button type="button" class="theme-swatch" data-theme="cyber" title="Neon Cyber">
+                <span class="swatch-color" style="background: linear-gradient(135deg, #06b6d4 0%, #0f172a 100%);"></span>
+                <span class="swatch-name">Cyber</span>
+              </button>
+              <button type="button" class="theme-swatch" data-theme="crimson" title="Crimson Ember">
+                <span class="swatch-color" style="background: linear-gradient(135deg, #f43f5e 0%, #4c0519 100%);"></span>
+                <span class="swatch-name">Crimson</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 3: Aspect Ratio -->
+          <div class="lyric-ctrl-section">
+            <span class="lyric-ctrl-label">Card Format</span>
+            <div class="lyric-ratio-pills" id="lyric-ratio-pills">
+              <button type="button" class="ratio-pill active" data-ratio="portrait">Portrait (4:5)</button>
+              <button type="button" class="ratio-pill" data-ratio="story">Story (9:16)</button>
+              <button type="button" class="ratio-pill" data-ratio="square">Square (1:1)</button>
+            </div>
+          </div>
+
+          <!-- Export Actions -->
+          <div class="lyric-card-actions">
+            <button type="button" class="btn-card-action primary" id="btn-download-lyric-card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Download Image (HD)</span>
+            </button>
+            <button type="button" class="btn-card-action secondary" id="btn-copy-lyric-card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>Copy Image</span>
+            </button>
+            <button type="button" class="btn-card-action secondary" id="btn-native-share-card">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              <span>Share</span>
             </button>
           </div>
         </div>
@@ -3059,6 +3174,6 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Application Logic -->
-  <script src="app.js?v=86"></script>
+  <script src="app.js?v=87"></script>
 </body>
 </html>
