@@ -2043,9 +2043,20 @@ async function playTrack(track, options = { startRadio: true }) {
   try {
     await audio.play();
     updatePlayPauseIcons(true);
+    if (state.screenOffPlayback) {
+      enableBackgroundAudioSession();
+    }
   } catch (err) {
+    if (document.hidden) {
+      console.warn('[Screen-off audio.play notice, retrying native stream directly]');
+      try {
+        await audio.play();
+        updatePlayPauseIcons(true);
+        return;
+      } catch (retryErr) {}
+    }
     console.warn('[Direct Audio notice, attempting YouTube Iframe player]:', err);
-    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && track.id && String(track.id).length === 11) {
+    if (!document.hidden && ytPlayer && typeof ytPlayer.loadVideoById === 'function' && track.id && String(track.id).length === 11) {
       isYTActive = true;
       try { audio.pause(); audio.src = ''; } catch (e) {}
       ytPlayer.loadVideoById(track.id);
@@ -6132,10 +6143,21 @@ function updateScreenOffUI() {
 
 function setupMediaSession() {
   if ('mediaSession' in navigator) {
-    navigator.mediaSession.setActionHandler('play', () => togglePlayPause());
-    navigator.mediaSession.setActionHandler('pause', () => togglePlayPause());
-    navigator.mediaSession.setActionHandler('previoustrack', () => playPrevTrack());
-    navigator.mediaSession.setActionHandler('nexttrack', () => playNextTrack(true));
+    navigator.mediaSession.setActionHandler('play', () => {
+      resumeAudioContext();
+      togglePlayPause();
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      togglePlayPause();
+    });
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      resumeAudioContext();
+      playPrevTrack();
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      resumeAudioContext();
+      playNextTrack(true);
+    });
     try {
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime !== undefined) {
@@ -6161,8 +6183,13 @@ function setupMediaSession() {
 
 function updateMediaSession(track) {
   if (!('mediaSession' in navigator) || !track) return;
-  const thumb = track.thumbnail || '/assets/artists/travis_scott.jpg';
+  let thumb = track.thumbnail || '/assets/artists/travis_scott.jpg';
   try {
+    if (thumb && !thumb.startsWith('http://') && !thumb.startsWith('https://') && !thumb.startsWith('data:')) {
+      try {
+        thumb = new URL(thumb, window.location.origin).href;
+      } catch (err) {}
+    }
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title || 'Unknown Title',
       artist: track.artist || 'Unknown Artist',
@@ -6172,6 +6199,7 @@ function updateMediaSession(track) {
         { src: thumb, sizes: '128x128', type: 'image/jpeg' },
         { src: thumb, sizes: '192x192', type: 'image/jpeg' },
         { src: thumb, sizes: '256x256', type: 'image/jpeg' },
+        { src: thumb, sizes: '384x384', type: 'image/jpeg' },
         { src: thumb, sizes: '512x512', type: 'image/jpeg' }
       ]
     });
@@ -7378,14 +7406,28 @@ function setupAudioListeners() {
   audio.addEventListener('play', () => {
     if (!isYTActive) updatePlayPauseIcons(true);
     broadcastUserPlaybackActivity(true);
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'playing';
+    }
+    if (state.screenOffPlayback) {
+      enableBackgroundAudioSession();
+    }
   });
   audio.addEventListener('pause', () => {
     if (!isYTActive) updatePlayPauseIcons(false);
     broadcastUserPlaybackActivity(false);
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'paused';
+    }
   });
   audio.addEventListener('error', () => {
     if (isYTActive) return;
     if (state.currentTrack && state.currentTrack.id) {
+      if (document.hidden) {
+        console.warn('[Screen-Off Stream Resilience] Display off/hidden; executing stream recovery without video fallback.');
+        triggerStreamRecovery(audio.currentTime || 0);
+        return;
+      }
       if (!state.networkResilience.isRecovering) {
         console.warn('[Stream Error] Attempting CDN token refresh & byte resumption...');
         triggerStreamRecovery(audio.currentTime || 0);
